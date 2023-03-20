@@ -13,12 +13,13 @@ from utls import Multidown, Singledown, timestring
 
 class Downloader:
     def __init__(self):
-        self.recent = deque([0] * 12, maxlen=12)
-        self.dic = {}
-        self.workers = []
-        self.signal = threading.Event()  # stop signal
-        self.Error = threading.Event()
+        self._recent = deque([0] * 12, maxlen=12)
+        self._dic = {}
+        self._workers = []
+        self._signal = threading.Event()  # stop signal
+        self._Error = threading.Event()
 
+        #attributes
         self.totalMB = 0
         self.progress = 0
         self.speed = 0
@@ -28,7 +29,7 @@ class Downloader:
         self.eta = '99:59:59'
         self.remaining = 0
 
-    def download(self, url, filepath, num_connections, display):
+    def download(self, url, filepath, num_connections, display,multithread):
         json_file = Path(filepath + '.progress.json')
         threads = []
         f_path = str(filepath)
@@ -41,12 +42,12 @@ class Downloader:
         if self.totalMB < 50:
             num_connections = 5
         # if no range avalable in header or no size from header use single thread
-        if not total or not head.headers.get('accept-ranges'):
+        if not total or not head.headers.get('accept-ranges') or not multithread:
             sd = Singledown()
             th = threading.Thread(target=sd.worker, args=(
-                url, f_path, self.signal, self.Error))
+                url, f_path, self._signal, self._Error))
             th.daemon = True
-            self.workers.append(sd)
+            self._workers.append(sd)
             th.start()
             total = inf if not total else total
             singlethread = True
@@ -57,9 +58,9 @@ class Downloader:
                 progress = json.loads(json_file.read_text(), object_hook=lambda d: {
                                       int(k) if k.isdigit() else k: v for k, v in d.items()})
             segment = total / num_connections
-            self.dic['total'] = total
-            self.dic['connections'] = num_connections
-            self.dic['paused'] = False
+            self._dic['total'] = total
+            self._dic['connections'] = num_connections
+            self._dic['paused'] = False
             for i in range(num_connections):
                 if not json_file.exists() or progress == {}:
                     # get the starting byte size by multiplying the segment by the part number eg 1024 * 2 = part2 beginning byte etc.
@@ -75,7 +76,7 @@ class Downloader:
                     position = progress[i]['position']
                     length = progress[i]['length']
 
-                self.dic[i] = {
+                self._dic[i] = {
                     'start': start,
                     'position': position,
                     'end': end,
@@ -85,34 +86,34 @@ class Downloader:
                     'url': url,
                     'completed': False
                 }
-                md = Multidown(self.dic, i, self.signal, self.Error)
+                md = Multidown(self._dic, i, self._signal, self._Error)
                 th = threading.Thread(target=md.worker)
                 th.daemon = True
                 threads.append(th)
                 th.start()
-                self.workers.append(md)
+                self._workers.append(md)
 
-            json_file.write_text(json.dumps(self.dic, indent=4))
+            json_file.write_text(json.dumps(self._dic, indent=4))
         downloaded = 0
         interval = 0.15
         self.download_mode = 'Multi-Threaded' if not singlethread else 'Single-Threaded'
         with output(initial_len=5, interval=0) as dynamic_print:
             while True:
-                json_file.write_text(json.dumps(self.dic, indent=4))
-                status = sum([i.completed for i in self.workers])
-                downloaded = sum(i.count for i in self.workers)
+                json_file.write_text(json.dumps(self._dic, indent=4))
+                status = sum([i.completed for i in self._workers])
+                downloaded = sum(i.count for i in self._workers)
                 self.doneMB = downloaded / 1048576
-                self.recent.append(downloaded)
+                self._recent.append(downloaded)
                 try:
                     self.progress = int(100 * downloaded / total)
                 except ZeroDivisionError:
                     self.progress = 0
 
-                gt0 = len([i for i in self.recent if i])
+                gt0 = len([i for i in self._recent if i])
                 if not gt0:
                     self.speed = 0
                 else:
-                    recent = list(self.recent)[12 - gt0:]
+                    recent = list(self._recent)[12 - gt0:]
                     if len(recent) == 1:
                         self.speed = recent[0] / 1048576 / interval
                     else:
@@ -130,14 +131,14 @@ class Downloader:
                         100 - self.progress), str(self.progress)) + '%' if total != inf else "Downloading..."
                     dynamic_print[1] = f'Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s, ETA: {self.eta}'
 
-                if self.signal.is_set():
-                    self.dic['paused'] = True
-                    json_file.write_text(json.dumps(self.dic, indent=4))
+                if self._signal.is_set():
+                    self._dic['paused'] = True
+                    json_file.write_text(json.dumps(self._dic, indent=4))
                     if singlethread:
                         print("Download wont be resumed in single thread mode")
                     break
 
-                if status == len(self.workers):
+                if status == len(self._workers):
                     if not singlethread:
                         BLOCKSIZE = 4096
                         BLOCKS = 1024
@@ -159,13 +160,13 @@ class Downloader:
 
         ended = datetime.now()
         self.time_spent = (ended - started).total_seconds()
-        if status == len(self.workers):
+        if status == len(self._workers):
             if display:
                 print(
                     f'Task completed, total time elapsed: {timestring(self.time_spent)}')
             json_file.unlink()
         else:
-            if self.Error.is_set():
+            if self._Error.is_set():
                 print("Download Error Occured!")
                 return
             if display:
@@ -173,19 +174,20 @@ class Downloader:
                     f'Task interrupted, time elapsed: {timestring(self.time_spent)}')
 
     def stop(self):
-        self.signal.set()
+        self._signal.set()
 
-    def start(self, url, filepath, num_connections=3, display=True, block=True, retries=0, retry_func=None):
+    def start(self, url, filepath, num_connections=3, display=True,multithread=True, block=True, retries=0, retry_func=None):
 
         def inner():
             self.download(url, filepath, num_connections, display)
             for _ in range(retries):
-                if self.Error.is_set():
+                if self._Error.is_set():
                     time.sleep(3)
                     self.__init__()
+                    _url = retry_func() if retry_func else url
                     if display:
                         print("retrying...")
-                    self.download(url, filepath, num_connections, display)
+                    self.download(_url, filepath, num_connections, display,multithread)
                 else:
                     break
 
@@ -197,7 +199,7 @@ class Downloader:
                 time.sleep(20)
                 curr = self.progress
                 if prev == curr:
-                    self.Error.set()
+                    self._Error.set()
                     self.stop()
                     break
 

@@ -51,8 +51,7 @@ class Multidown:
                     r = s.get(
                         url, headers={"range": f"bytes={start}-{end}"}, stream=True)
                     while True:
-                        if self.stop.is_set():
-                            r.connection.close()
+                        if self.stop.is_set() or self.Error.is_set():
                             r.close()
                             s.close()
                             break
@@ -67,7 +66,6 @@ class Multidown:
                         else:
                             break
                 except Exception as e:
-                    self.stop.set()
                     self.Error.set()
                     time.sleep(1)
                     print(
@@ -90,10 +88,9 @@ class Singledown:
                     if chunk:
                         self.count += len(chunk)
                         file.write(chunk)
-                    if stop.is_set():
+                    if stop.is_set() or Error.is_set():
                         return
         except Exception as e:
-            stop.set()
             Error.set()
             time.sleep(1)
             print(f"Error in thread {self.id}: ({e.__class__.__name__}: {e})")

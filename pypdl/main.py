@@ -12,11 +12,11 @@ from utls import Multidown, Singledown, timestring
 
 
 class Downloader:
-    def __init__(self):
+    def __init__(self,StopEvent=threading.Event()):
         self._recent = deque([0] * 12, maxlen=12)
         self._dic = {}
         self._workers = []
-        self._signal = threading.Event()  # stop signal
+        self._signal = StopEvent  # stop signal
         self._Error = threading.Event()
 
         #attributes
@@ -131,11 +131,9 @@ class Downloader:
                         100 - self.progress), str(self.progress)) + '%' if total != inf else "Downloading..."
                     dynamic_print[1] = f'Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s, ETA: {self.eta}'
 
-                if self._signal.is_set():
+                if self._signal.is_set() or self._Error.is_set():
                     self._dic['paused'] = True
                     json_file.write_text(json.dumps(self._dic, indent=4))
-                    if singlethread:
-                        print("Download wont be resumed in single thread mode")
                     break
 
                 if status == len(self._workers):
@@ -183,7 +181,7 @@ class Downloader:
             for _ in range(retries):
                 if self._Error.is_set():
                     time.sleep(3)
-                    self.__init__()
+                    self.__init__(self._signal)
                     _url = retry_func() if retry_func else url
                     if display:
                         print("retrying...")
@@ -202,7 +200,9 @@ class Downloader:
                     self._Error.set()
                     self.stop()
                     break
-
+        
+        self.__init__(self._signal)
+        self._signal.clear()
         th = threading.Thread(target=inner)
         th.start()
 

@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.1'
+VERSION = '0.1.0'
 DESCRIPTION = 'A Download Manager for python'
 LONG_DESCRIPTION = 'A python concurrent python downloader with resume capablities.'
 
@@ -17,11 +17,11 @@ setup(
     install_requires=['requests','reprint'],
     keywords=['python', 'downloader', 'concurrent-downloader', 'parrel-downloader', 'download manager', 'fast-downloader'],
     classifiers=[
-        "Development Status :: 1 - Planning",
-        "Intended Audience :: Developers",
-        "Programming Language :: Python :: 3",
-        "Operating System :: Unix",
-        "Operating System :: MacOS :: MacOS X",
-        "Operating System :: Microsoft :: Windows",
+        "Development Status: 3 - Alpha",
+        "Intended Audience: Developers",
+        "Programming Language: Python3",
+        "Operating System: Linux",
+        "Operating System: MacOS",
+        "Operating System: Windows",
     ]
 )

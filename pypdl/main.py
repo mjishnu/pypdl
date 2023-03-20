@@ -194,7 +194,7 @@ class Downloader:
             curr = 0
             while True:
                 prev = self.progress
-                time.sleep(10)
+                time.sleep(20)
                 curr = self.progress
                 if prev == curr:
                     self.Error.set()

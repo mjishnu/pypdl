@@ -179,7 +179,7 @@ class Downloader:
     def start(self, url, filepath, num_connections=3, display=True,multithread=True, block=True, retries=0, retry_func=None):
 
         def inner():
-            self.download(url, filepath, num_connections, display)
+            self.download(url, filepath, num_connections, display,multithread)
             for _ in range(retries):
                 if self._Error.is_set():
                     time.sleep(3)

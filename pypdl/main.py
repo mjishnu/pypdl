@@ -86,8 +86,8 @@ class Downloader:
                     'completed': False
                 }
                 md = Multidown(self.dic, i, self.signal, self.Error)
-                th.daemon = True
                 th = threading.Thread(target=md.worker)
+                th.daemon = True
                 threads.append(th)
                 th.start()
                 self.workers.append(md)

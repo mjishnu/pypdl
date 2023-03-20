@@ -6,7 +6,7 @@ LONG_DESCRIPTION = 'A python concurrent python downloader with resume capablitie
 
 # Setting up
 setup(
-    name="pydl",
+    name="pypdl",
     version=VERSION,
     author="m-jishnu",
     author_email="<jishnum499@gmail.com>",

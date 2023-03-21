@@ -16,6 +16,7 @@ class Downloader:
         self._recent = deque([0] * 12, maxlen=12)
         self._dic = {}
         self._workers = []
+        self._Error = threading.Event()
 
         #attributes
         self.totalMB = 0
@@ -27,13 +28,14 @@ class Downloader:
         self.eta = '99:59:59'
         self.remaining = 0
         self.Stop = StopEvent 
-        self.Error = threading.Event()
+        self.Failed = False
+        self.Success = False
 
     def download(self, url, filepath, num_connections, display,multithread):
         json_file = Path(filepath + '.progress.json')
         threads = []
         f_path = str(filepath)
-        head = requests.head(url)
+        head = requests.head(url,timeout=20)
         total = int(head.headers.get('content-length'))
         self.totalMB = total / 1048576  # 1MB = 1048576 bytes (size in MB)
         started = datetime.now()
@@ -45,8 +47,7 @@ class Downloader:
         if not total or not head.headers.get('accept-ranges') or not multithread:
             sd = Singledown()
             th = threading.Thread(target=sd.worker, args=(
-                url, f_path, self.Stop, self.Error))
-            th.daemon = True
+                url, f_path, self.Stop, self._Error))
             self._workers.append(sd)
             th.start()
             total = inf if not total else total
@@ -86,9 +87,8 @@ class Downloader:
                     'url': url,
                     'completed': False
                 }
-                md = Multidown(self._dic, i, self.Stop, self.Error)
+                md = Multidown(self._dic, i, self.Stop, self._Error)
                 th = threading.Thread(target=md.worker)
-                th.daemon = True
                 threads.append(th)
                 th.start()
                 self._workers.append(md)
@@ -131,7 +131,7 @@ class Downloader:
                         100 - self.progress), str(self.progress)) + '%' if total != inf else "Downloading..."
                     dynamic_print[1] = f'Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s, ETA: {self.eta}'
 
-                if self.Stop.is_set() or self.Error.is_set():
+                if self.Stop.is_set() or self._Error.is_set():
                     self._dic['paused'] = True
                     json_file.write_text(json.dumps(self._dic, indent=4))
                     break
@@ -153,61 +153,62 @@ class Downloader:
                                         else:
                                             break
                                 Path(file_).unlink()
+                    json_file.unlink()
+                    if display:
+                        print('Task completed!')
                     break
                 time.sleep(interval)
 
         ended = datetime.now()
         self.time_spent = (ended - started).total_seconds()
-        if status == len(self._workers):
-            if display:
-                print(
-                    f'Task completed, total time elapsed: {timestring(self.time_spent)}')
-            json_file.unlink()
-        else:
-            if self.Error.is_set():
-                print("Download Error Occured!")
-                return
-            if display:
-                print(
-                    f'Task interrupted, time elapsed: {timestring(self.time_spent)}')
+        
+        if display:
+            if self.Stop:
+                print(f'Task interrupted!') 
+            print(f'Time elapsed: {timestring(self.time_spent)}')
 
     def stop(self):
         self.Stop.set()
 
-    def start(self, url, filepath, num_connections=10, display=True,multithread=True, block=True, retries=0, retry_func=None):
+
+    def start(self, url, filepath, num_connections=10, display=True, multithread=True, block=True, retries=0, retry_func=None):
 
         def start_thread():
-            self.download(url, filepath, num_connections, display,multithread)
-            for _ in range(retries):
-                if self.Error.is_set():
-                    time.sleep(3)
-                    self.__init__(self.Stop)
-                    _url = retry_func() if retry_func else url
-                    if display:
-                        print("retrying...")
-                    self.download(_url, filepath, num_connections, display,multithread)
-                else:
-                    break
+            try:
+                self.download(url, filepath, num_connections, display, multithread)
+                for _ in range(retries):
+                    if self._Error.is_set():
+                        time.sleep(3)
+                        self.__init__(self.Stop)
 
-        def error_checker():
-            prev = 0
-            curr = 0
-            while True:
-                prev = self.progress
-                time.sleep(20)
-                curr = self.progress
-                if prev == curr:
-                    self.Error.set()
-                    break
-        
+                        _url = url
+                        if retry_func:
+                            try:
+                                _url = retry_func()
+                            except Exception as e:
+                                print(f"Retry function Error: ({e.__class__.__name__}, {e})")
+
+                        if display:
+                            print("retrying...")
+                        self.download(_url, filepath, num_connections,
+                                    display, multithread)
+                    else:
+                        break
+            except Exception as e:
+                print(f"Download Error: ({e.__class__.__name__}, {e})")
+                self._Error.set()
+                
+            if self._Error.is_set():
+                self.Failed = True
+                print("Download Failed!")
+                return
+
+            self.Success = True
+
         self.__init__(self.Stop)
         self.Stop.clear()
         th = threading.Thread(target=start_thread)
         th.start()
-
-        err = threading.Thread(target=error_checker)
-        err.daemon = True
-        err.start()
 
         if block:
             th.join()

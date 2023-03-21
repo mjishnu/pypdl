@@ -1,2 +1,2 @@
 # pypdl
-A python concurrent python downloader with resume capablities
+A concurrent python downloader with resume capablities

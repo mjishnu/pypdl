@@ -16,8 +16,6 @@ class Downloader:
         self._recent = deque([0] * 12, maxlen=12)
         self._dic = {}
         self._workers = []
-        self._signal = StopEvent  # stop signal
-        self._Error = threading.Event()
 
         #attributes
         self.totalMB = 0
@@ -28,6 +26,8 @@ class Downloader:
         self.doneMB = 0
         self.eta = '99:59:59'
         self.remaining = 0
+        self.Stop = StopEvent 
+        self.Error = threading.Event()
 
     def download(self, url, filepath, num_connections, display,multithread):
         json_file = Path(filepath + '.progress.json')
@@ -45,7 +45,7 @@ class Downloader:
         if not total or not head.headers.get('accept-ranges') or not multithread:
             sd = Singledown()
             th = threading.Thread(target=sd.worker, args=(
-                url, f_path, self._signal, self._Error))
+                url, f_path, self.Stop, self.Error))
             th.daemon = True
             self._workers.append(sd)
             th.start()
@@ -86,7 +86,7 @@ class Downloader:
                     'url': url,
                     'completed': False
                 }
-                md = Multidown(self._dic, i, self._signal, self._Error)
+                md = Multidown(self._dic, i, self.Stop, self.Error)
                 th = threading.Thread(target=md.worker)
                 th.daemon = True
                 threads.append(th)
@@ -131,7 +131,7 @@ class Downloader:
                         100 - self.progress), str(self.progress)) + '%' if total != inf else "Downloading..."
                     dynamic_print[1] = f'Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s, ETA: {self.eta}'
 
-                if self._signal.is_set() or self._Error.is_set():
+                if self.Stop.is_set() or self.Error.is_set():
                     self._dic['paused'] = True
                     json_file.write_text(json.dumps(self._dic, indent=4))
                     break
@@ -164,7 +164,7 @@ class Downloader:
                     f'Task completed, total time elapsed: {timestring(self.time_spent)}')
             json_file.unlink()
         else:
-            if self._Error.is_set():
+            if self.Error.is_set():
                 print("Download Error Occured!")
                 return
             if display:
@@ -172,16 +172,16 @@ class Downloader:
                     f'Task interrupted, time elapsed: {timestring(self.time_spent)}')
 
     def stop(self):
-        self._signal.set()
+        self.Stop.set()
 
     def start(self, url, filepath, num_connections=10, display=True,multithread=True, block=True, retries=0, retry_func=None):
 
         def inner():
             self.download(url, filepath, num_connections, display,multithread)
             for _ in range(retries):
-                if self._Error.is_set():
+                if self.Error.is_set():
                     time.sleep(3)
-                    self.__init__(self._signal)
+                    self.__init__(self.Stop)
                     _url = retry_func() if retry_func else url
                     if display:
                         print("retrying...")
@@ -197,12 +197,11 @@ class Downloader:
                 time.sleep(20)
                 curr = self.progress
                 if prev == curr:
-                    self._Error.set()
-                    self.stop()
+                    self.Error.set()
                     break
         
-        self.__init__(self._signal)
-        self._signal.clear()
+        self.__init__(self.Stop)
+        self.Stop.clear()
         th = threading.Thread(target=inner)
         th.start()
 

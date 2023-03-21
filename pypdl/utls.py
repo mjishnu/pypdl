@@ -47,7 +47,7 @@ class Multidown:
         if self.count != self.getval('length'):
             try:
                 with requests.session() as s, open(path, 'ab+') as f:
-                    with s.get(url, headers={"range": f"bytes={start}-{end}"}, stream=True,timeout=20) as r:
+                    with s.get(url, headers={"range": f"bytes={start}-{end}"}, stream=True, timeout=20) as r:
                         while True:
                             if self.stop.is_set() or self.Error.is_set():
                                 break
@@ -79,7 +79,7 @@ class Singledown:
 
     def worker(self, url, path, stop, Error):
         try:
-            with requests.get(url, stream=True,timeout=20) as r, open(path, 'wb') as file:
+            with requests.get(url, stream=True, timeout=20) as r, open(path, 'wb') as file:
                 for chunk in r.iter_content(1048576):  # 1MB
                     if chunk:
                         self.count += len(chunk)

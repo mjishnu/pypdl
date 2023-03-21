@@ -12,13 +12,13 @@ from .utls import Multidown, Singledown, timestring
 
 
 class Downloader:
-    def __init__(self,StopEvent=threading.Event()):
+    def __init__(self, StopEvent=threading.Event()):
         self._recent = deque([0] * 12, maxlen=12)
         self._dic = {}
         self._workers = []
         self._Error = threading.Event()
 
-        #attributes
+        # attributes
         self.totalMB = 0
         self.progress = 0
         self.speed = 0
@@ -27,15 +27,15 @@ class Downloader:
         self.doneMB = 0
         self.eta = '99:59:59'
         self.remaining = 0
-        self.Stop = StopEvent 
+        self.Stop = StopEvent
         self.Failed = False
         self.Success = False
 
-    def download(self, url, filepath, num_connections, display,multithread):
+    def download(self, url, filepath, num_connections, display, multithread):
         json_file = Path(filepath + '.progress.json')
         threads = []
         f_path = str(filepath)
-        head = requests.head(url,timeout=20)
+        head = requests.head(url, timeout=20)
         total = int(head.headers.get('content-length'))
         self.totalMB = total / 1048576  # 1MB = 1048576 bytes (size in MB)
         started = datetime.now()
@@ -161,21 +161,21 @@ class Downloader:
 
         ended = datetime.now()
         self.time_spent = (ended - started).total_seconds()
-        
+
         if display:
             if self.Stop:
-                print(f'Task interrupted!') 
+                print(f'Task interrupted!')
             print(f'Time elapsed: {timestring(self.time_spent)}')
 
     def stop(self):
         self.Stop.set()
 
-
     def start(self, url, filepath, num_connections=10, display=True, multithread=True, block=True, retries=0, retry_func=None):
 
         def start_thread():
             try:
-                self.download(url, filepath, num_connections, display, multithread)
+                self.download(url, filepath, num_connections,
+                              display, multithread)
                 for _ in range(retries):
                     if self._Error.is_set():
                         time.sleep(3)
@@ -186,18 +186,19 @@ class Downloader:
                             try:
                                 _url = retry_func()
                             except Exception as e:
-                                print(f"Retry function Error: ({e.__class__.__name__}, {e})")
+                                print(
+                                    f"Retry function Error: ({e.__class__.__name__}, {e})")
 
                         if display:
                             print("retrying...")
                         self.download(_url, filepath, num_connections,
-                                    display, multithread)
+                                      display, multithread)
                     else:
                         break
             except Exception as e:
                 print(f"Download Error: ({e.__class__.__name__}, {e})")
                 self._Error.set()
-                
+
             if self._Error.is_set():
                 self.Failed = True
                 print("Download Failed!")

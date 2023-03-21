@@ -176,7 +176,7 @@ class Downloader:
 
     def start(self, url, filepath, num_connections=10, display=True,multithread=True, block=True, retries=0, retry_func=None):
 
-        def inner():
+        def start_thread():
             self.download(url, filepath, num_connections, display,multithread)
             for _ in range(retries):
                 if self.Error.is_set():
@@ -202,7 +202,7 @@ class Downloader:
         
         self.__init__(self.Stop)
         self.Stop.clear()
-        th = threading.Thread(target=inner)
+        th = threading.Thread(target=start_thread)
         th.start()
 
         err = threading.Thread(target=error_checker)

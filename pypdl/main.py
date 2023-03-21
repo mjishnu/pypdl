@@ -40,7 +40,7 @@ class Downloader:
         singlethread = False
 
         if self.totalMB < 50:
-            num_connections = 5
+            num_connections = 5 if num_connections > 5 else num_connections
         # if no range avalable in header or no size from header use single thread
         if not total or not head.headers.get('accept-ranges') or not multithread:
             sd = Singledown()
@@ -174,7 +174,7 @@ class Downloader:
     def stop(self):
         self._signal.set()
 
-    def start(self, url, filepath, num_connections=3, display=True,multithread=True, block=True, retries=0, retry_func=None):
+    def start(self, url, filepath, num_connections=10, display=True,multithread=True, block=True, retries=0, retry_func=None):
 
         def inner():
             self.download(url, filepath, num_connections, display,multithread)

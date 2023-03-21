@@ -1,1 +1,1 @@
-from main import Downloader
+from .main import Downloader

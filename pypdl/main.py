@@ -29,7 +29,6 @@ class Downloader:
         self.remaining = 0
         self.Stop = StopEvent
         self.Failed = False
-        self.Success = False
 
     def download(self, url, filepath, num_connections, display, multithread):
         json_file = Path(filepath + '.progress.json')
@@ -202,9 +201,6 @@ class Downloader:
             if self._Error.is_set():
                 self.Failed = True
                 print("Download Failed!")
-                return
-
-            self.Success = True
 
         self.__init__(self.Stop)
         self.Stop.clear()

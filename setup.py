@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '1.0.0'
+VERSION = '0.0.4'
 DESCRIPTION = 'A concurrent python download manager'
 with open("README.md", "r") as f:
     LONG_DESCRIPTION = f.read()
@@ -23,5 +23,5 @@ setup(
     },
     packages=find_packages(),
     install_requires=['requests','reprint'],
-    keywords=['python', 'downloader', 'concurrent-downloader', 'parrel-downloader', 'download manager', 'fast-downloader']
+    keywords=['python', 'downloader', 'concurrent-downloader', 'parrel-downloader', 'download manager', 'fast-downloader'],
 )

@@ -1,6 +1,6 @@
 # pypdl
 
-**pypdl** is a Python library for downloading files from the internet. It provides features such as multi-threaded downloads, retry download incase of failure and option to continue downloading using a different url if necessary, progress tracking, pause/resume functionality and many more.
+pypdl is a Python library for downloading files from the internet. It provides features such as multi-threaded downloads, retry download incase of failure and option to continue downloading using a different url if necessary, progress tracking, pause/resume functionality and many more.
 
 ## Installation
 
@@ -14,10 +14,10 @@ pip install pypdl
 
 ### Basic Usage
 
-To download a file using the Download Manager, simply create a new `Downloader` object and call its `start` method, passing in the URL of the file to be downloaded and the path where it should be saved:
+To download a file using the pypdl, simply create a new `Downloader` object and call its `start` method, passing in the URL of the file to be downloaded and the path where it should be saved:
 
 ```python
-from download_manager import Downloader
+from pypdl import Downloader
 
 dl = Downloader()
 dl.start('http://example.com/file.txt', 'file.txt')
@@ -54,10 +54,10 @@ The `retry_func` option specifies a function to call to get a new download URL i
 
 ### Example
 
-Here is an example that demonstrates how to use the Download Manager library to download a file from the internet:
+Here is an example that demonstrates how to use pypdl library to download a file from the internet:
 
 ```python
-from download_manager import Downloader
+from pypdl import Downloader
 
 def main():
     # create a new downloader object
@@ -80,10 +80,10 @@ if __name__ == '__main__':
 ```
 This example downloads a large file from the internet using 10 threads and displays the download progress. If the download fails, it will retry up to 3 times.
 
-Another example demonstrating downloading a file and printing the progress to console and providing a custom **stop event**:
+Another example of using a custom stop event and printing the progress to console:
 
 ```python
-from downloader import Downloader
+from pypdl import Downloader
 from threading import Event
 
 # create a custom stop event
@@ -115,7 +115,7 @@ while d.progress != 100:
   print(d.progress)
 
 ```
-This example we create a custom **StopEvent** and pass it to the **Downloader** object. We then start the download process and print the progress to console. We then stop the download process and do something else. After that we resume the download process and print the rest of the progress to console. This can be used to create a pause/resume functionality.
+This example we create a custom **stop event** and pass it to the **Downloader** object. We then start the download process and print the progress to console. We then stop the download process and do something else. After that we resume the download process and print the rest of the progress to console. This can be used to create a pause/resume functionality.
 
 ## API Reference
 

@@ -13,16 +13,12 @@ def timestring(sec):
 
 class Multidown:
     def __init__(self, dic, id, stop, Error):
-        self.count = 0
+        self.curr = 0
         self.completed = 0
-        # used to differniate between diffent instance of multidown class
         self.id = id
-        # the dic is filled with data from the json {start,position,end,filepath,count,length,url,completed}
-        # the json also has info like total bytes,number of connections (parts)
-        self.dic = dic
-        self.position = self.getval('position')
+        self.dic = dic  # {start,curr,end,filepath,count,size,url,completed}
         self.stop = stop
-        self.Error = Error
+        self.error = Error
 
     def getval(self, key):
         return self.dic[self.id][key]
@@ -31,64 +27,63 @@ class Multidown:
         self.dic[self.id][key] = val
 
     def worker(self):
-        # getting the path(file_name/file) from the json file (dict)
         filepath = self.getval('filepath')
         path = Path(filepath)
         end = self.getval('end')
-        # checks if the part exists if it doesn't exist set start from the json file(download from beginning) else download beginning from size of the file
+
+        # checks if the part exists if it doesn't exist set start from  beginning else download rest of the file
         if not path.exists():
             start = self.getval('start')
         else:
             # gets the size of the file
-            self.count = path.stat().st_size
-            start = self.getval('start') + self.count
+            self.curr = path.stat().st_size
+            start = self.getval('start') + self.curr
+
         url = self.getval('url')
-        self.position = start
-        if self.count != self.getval('length'):
+        if self.curr != self.getval('size'):
             try:
+                #download part
                 with requests.session() as s, open(path, 'ab+') as f:
-                    with s.get(url, headers={"range": f"bytes={start}-{end}"}, stream=True, timeout=20) as r:
-                        while True:
-                            if self.stop.is_set() or self.Error.is_set():
-                                break
-                            # the next returns the next element form the iterator of r(the request we send to dowload) and returns None if the iterator is exhausted
-                            chunk = next(r.iter_content(128 * 1024), None)
+                    headers = {"range": f"bytes={start}-{end}"}
+                    with s.get(url, headers=headers, stream=True, timeout=20) as r:
+                        for chunk in r.iter_content(1048576):  # 1MB
                             if chunk:
                                 f.write(chunk)
-                                self.count += len(chunk)
-                                self.position += len(chunk)
-                                self.setval('count', self.count)
-                                self.setval('position', self.position)
-                            else:
+                                self.curr += len(chunk)
+                                self.setval('cocurrucurrnt', self.curr)
+                            if not chunk or self.stop.is_set() or self.error.is_set():
                                 break
             except Exception as e:
-                self.Error.set()
+                self.error.set()
                 time.sleep(1)
                 print(
                     f"Error in thread {self.id}: ({e.__class__.__name__}, {e})")
-        # self.count is the length of current download if its equal to the size of the part we need to download them mark as downloaded
-        if self.count == self.getval('length'):
+
+        if self.curr == self.getval('size'):
             self.completed = 1
             self.setval('completed', 1)
 
 
 class Singledown:
     def __init__(self):
-        self.count = 0
+        self.curr = 0
         self.completed = 0
 
-    def worker(self, url, path, stop, Error):
+    def worker(self, url, path, stop, error):
+        flag = True
         try:
+            #download part
             with requests.get(url, stream=True, timeout=20) as r, open(path, 'wb') as file:
                 for chunk in r.iter_content(1048576):  # 1MB
                     if chunk:
-                        self.count += len(chunk)
                         file.write(chunk)
-                    if stop.is_set() or Error.is_set():
-                        return
+                        self.curr += len(chunk)
+                    if not chunk or stop.is_set() or error.is_set():
+                        flag = False
+                        break
         except Exception as e:
-            Error.set()
+            error.set()
             time.sleep(1)
             print(f"Error in thread {self.id}: ({e.__class__.__name__}: {e})")
-
-        self.completed = 1
+        if flag:
+            self.completed = 1

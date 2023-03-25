@@ -68,21 +68,20 @@ class Downloader:
                     # here end is the ((segment * next part ) - 1 byte) since the last byte is also downloaded by next part
                     # here (i != num_connections - 1) since we don't want to do this 1 byte subtraction for last part (index is from 0)
                     end = int(segment * (i + 1)) - (i != num_connections - 1)
-                    position = start
-                    length = end - start + (i != num_connections - 1)
+                    curr = start
+                    size = end - start + (i != num_connections - 1)
                 else:
                     start = progress[i]['start']
                     end = progress[i]['end']
-                    position = progress[i]['position']
-                    length = progress[i]['length']
+                    curr = progress[i]['curr']
+                    size = progress[i]['size']
 
                 self._dic[i] = {
                     'start': start,
-                    'position': position,
+                    'curr': curr,
                     'end': end,
                     'filepath': f'{filepath}.{i}.part',
-                    'count': 0,
-                    'length': length,
+                    'size': size,
                     'url': url,
                     'completed': False
                 }
@@ -100,7 +99,7 @@ class Downloader:
             while True:
                 json_file.write_text(json.dumps(self._dic, indent=4))
                 status = sum([i.completed for i in self._workers])
-                downloaded = sum(i.count for i in self._workers)
+                downloaded = sum(i.curr for i in self._workers)
                 self.doneMB = downloaded / 1048576
                 self._recent.append(downloaded)
                 try:
@@ -162,7 +161,7 @@ class Downloader:
         self.time_spent = (ended - started).total_seconds()
 
         if display:
-            if self.Stop:
+            if self.Stop.is_set():
                 print(f'Task interrupted!')
             print(f'Time elapsed: {timestring(self.time_spent)}')
 

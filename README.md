@@ -80,7 +80,7 @@ if __name__ == '__main__':
 ```
 This example downloads a large file from the internet using 10 threads and displays the download progress. If the download fails, it will retry up to 3 times.
 
-Another example demonstrating downloading a file and printing the progress to console and providing a custom **Stop Event**:
+Another example demonstrating downloading a file and printing the progress to console and providing a custom **stop event**:
 
 ```python
 from downloader import Downloader

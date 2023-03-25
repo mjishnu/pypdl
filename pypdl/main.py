@@ -99,7 +99,8 @@ class Downloader:
                 self._workers.append(md)
 
             # save the progress to the progress file
-            json_file.write_text(json.dumps(self._dic, indent=4))
+            if not singlethread:
+                json_file.write_text(json.dumps(self._dic, indent=4))
 
         downloaded = 0
         interval = 0.15
@@ -150,7 +151,9 @@ class Downloader:
                 # check if download has been stopped or if an error has occurred
                 if self.Stop.is_set() or self._Error.is_set():
                     self._dic['paused'] = True
-                    json_file.write_text(json.dumps(self._dic, indent=4))
+                    if not singlethread:
+                        # save progress to progress file
+                        json_file.write_text(json.dumps(self._dic, indent=4))
                     break
 
                 # check if all workers have completed
@@ -171,8 +174,8 @@ class Downloader:
                                         else:
                                             break
                                 Path(file_).unlink()
-                    # delete the progress file
-                    json_file.unlink()
+                        # delete the progress file
+                        json_file.unlink()
                     break
                 time.sleep(interval)
 

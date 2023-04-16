@@ -67,19 +67,20 @@ class Downloader:
             self._dic['connections'] = num_connections
             self._dic['paused'] = False
             for i in range(num_connections):
-                if not json_file.exists() or progress == {}:
+                try:
+                    # try to use progress file to resume download
+                    start = progress[i]['start']
+                    end = progress[i]['end']
+                    curr = progress[i]['curr']
+                    size = progress[i]['size']
+                except:
+                    # if not able to use progress file then calculate the start, end, curr and size
                     # calculate the beginning byte offset by multiplying the segment by num_connections.
                     start = int(segment * i)
                     # here end is the ((segment * next part ) - 1 byte) since the last byte is downloaded by next part except for the last part
                     end = int(segment * (i + 1)) - (i != num_connections - 1)
                     curr = start
                     size = end - start + (i != num_connections - 1)
-                else:
-                    # use progress file to resume download
-                    start = progress[i]['start']
-                    end = progress[i]['end']
-                    curr = progress[i]['curr']
-                    size = progress[i]['size']
 
                 self._dic[i] = {
                     'start': start,

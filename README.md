@@ -63,6 +63,9 @@ def main():
     # create a new downloader object
     dl = Downloader()
 
+    # Use custom headers to set user-agent
+    dl.headers = {User-Agent:"Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0"}
+
     # start the download
     dl.start(
         url='https://speed.hetzner.de/100MB.bin',
@@ -78,7 +81,8 @@ def main():
 if __name__ == '__main__':
     main()
 ```
-This example downloads a large file from the internet using 10 threads and displays the download progress. If the download fails, it will retry up to 3 times.
+
+This example downloads a large file from the internet using 10 threads and displays the download progress. If the download fails, it will retry up to 3 times. we are aso using a custom header to set user-agent
 
 Another example of using a custom stop event and printing the progress to console:
 
@@ -115,6 +119,7 @@ while d.progress != 100:
   print(d.progress)
 
 ```
+
 This example we create a custom **stop event** and pass it to the **Downloader** object. We then start the download process and print the progress to console. We then stop the download process and do something else. After that we resume the download process and print the rest of the progress to console. This can be used to create a pause/resume functionality.
 
 ## API Reference
@@ -124,33 +129,36 @@ This example we create a custom **stop event** and pass it to the **Downloader**
 The `Downloader` class represents a file downloader that can download a file from a given URL to a specified file path. The class supports both single-threaded and multi-threaded downloads and many other features like retry download incase of failure and option to continue downloading using a different url if necessary, pause/resume functionality, progress tracking etc.
 
 #### Parameters
-* `StopEvent`: An optional parameter to set custom a stop event.
+
+-   `StopEvent`: An optional parameter to set custom a stop event.
+-   `header`: An optional parameter to set custom header. (Note: Never use custom "range" header if using multithread = True)
 
 #### Attributes
 
-* `totalMB`: The total size of the file to be downloaded, in MB.
-* `progress`: The download progress percentage.
-* `speed`: The download speed, in MB/s.
-* `download_mode`: The download mode: single-threaded or multi-threaded.
-* `time_spent`: The time spent downloading, in seconds.
-* `doneMB`: The amount of data downloaded so far, in MB.
-* `eta`: The estimated time remaining for download completion, in the format "HH:MM:SS".
-* `remaining`: The amount of data remaining to be downloaded, in MB.
-* `Stop`: An event that can be used to stop the download process.
-* `Failed`: A flag that indicates if the download failed.
+-   `totalMB`: The total size of the file to be downloaded, in MB.
+-   `progress`: The download progress percentage.
+-   `speed`: The download speed, in MB/s.
+-   `download_mode`: The download mode: single-threaded or multi-threaded.
+-   `time_spent`: The time spent downloading, in seconds.
+-   `doneMB`: The amount of data downloaded so far, in MB.
+-   `eta`: The estimated time remaining for download completion, in the format "HH:MM:SS".
+-   `remaining`: The amount of data remaining to be downloaded, in MB.
+-   `Stop`: An event that can be used to stop the download process.
+-   `headers`: A dictionary containing user headers.
+-   `Failed`: A flag that indicates if the download failed.
 
 #### Methods
 
-* `start(url, filepath, num_connections=10, display=True, multithread=True, block=True, retries=0, retry_func=None)`: Starts the download process. Parameters:
-  * `url` (str): The download URL.
-  * `filepath` (str): The file path to save the download.
-  * `num_connections` (int): The number of connections to use for a multi-threaded download.
-  * `display` (bool): Whether to display download progress.
-  * `multithread` (bool): Whether to use multi-threaded download.
-  * `block` (bool): Whether to block until the download is complete.
-  * `retries` (int): The number of times to retry the download in case of an error.
-  * `retry_func` (function): A function to call to get a new download URL in case of an error.
-* `stop()`: Stops the download process.
+-   `start(url, filepath, num_connections=10, display=True, multithread=True, block=True, retries=0, retry_func=None)`: Starts the download process. Parameters:
+    -   `url` (str): The download URL.
+    -   `filepath` (str): The file path to save the download.
+    -   `num_connections` (int): The number of connections to use for a multi-threaded download.
+    -   `display` (bool): Whether to display download progress.
+    -   `multithread` (bool): Whether to use multi-threaded download.
+    -   `block` (bool): Whether to block until the download is complete.
+    -   `retries` (int): The number of times to retry the download in case of an error.
+    -   `retry_func` (function): A function to call to get a new download URL in case of an error.
+-   `stop()`: Stops the download process.
 
 ### Helper Classes
 
@@ -159,40 +167,63 @@ The `Downloader` class represents a file downloader that can download a file fro
 The `Multidown` class represents a download worker that is responsible for downloading a specific part of a file in multiple chunks.
 
 ##### Parameters
-* `dic`: Dictionary that contains the download information.
-* `id`: ID of the download part.
-* `stop`: Stop event.
-* `error`: Error event.
+
+-   `dic`: Dictionary that contains the download information.
+-   `id`: ID of the download part.
+-   `stop`: Stop event.
+-   `error`: Error event.
+-   `headers`: Custom headers.
 
 ##### Attributes
 
-* `curr`: The current size of the downloaded file.
-* `completed`: Whether the download for this part is complete.
-* `id`: The ID of this download part.
-* `dic`: A dictionary containing download information for all parts.
-* `stop`: An event that can be used to stop the download process.
-* `error`: An event that can be used to signal an error.
+-   `curr`: The current size of the downloaded file.
+-   `completed`: Whether the download for this part is complete.
+-   `id`: The ID of this download part.
+-   `dic`: A dictionary containing download information for all parts.
+-   `stop`: An event that can be used to stop the download process.
+-   `error`: An event that can be used to signal an error.
+-   `headers`: A dictionary containing user headers.
 
 ##### Methods
 
-* `getval(key)`: Gets the value of a key from the dictionary.
-* `setval(key, val)`: Sets the value of a key in the dictionary.
-* `worker()`: Downloads a part of the file in multiple chunks.
+-   `getval(key)`: Gets the value of a key from the dictionary.
+-   `setval(key, val)`: Sets the value of a key in the dictionary.
+-   `worker()`: Downloads a part of the file in multiple chunks.
 
 #### `Singledown()`
 
 The `Singledown` class represents a download worker that is responsible for downloading a whole file in a single chunk.
 
+##### Parameters
+
+-   `url`: Url of the file.
+-   `path`: Path to save the file.
+-   `stop`: Stop event.
+-   `error`: Error event.
+-   `headers`: User headers.
+
 ##### Attributes
 
-* `curr`: The current size of the downloaded file.
-* `completed`: Whether the download is complete.
+-   `curr`: The current size of the downloaded file.
+-   `completed`: Whether the download is complete.
+-   `url`: The URL of the file to download.
+-   `path`: The path to save the downloaded file.
+-   `stop`: Event to stop the download.
+-   `error`: Event to indicate an error occurred.
+-   `headers`: Custom user headers.
 
 ##### Methods
 
-* `worker(url, path, stop, error)`: Downloads a whole file in a single chunk. Parameters:
-  * `url` (str): The download URL.
-  * `path` (str): The file path to save the download.
-  * `stop` (Event): An event that can be used to stop the download process.
-  * `error` (Event): An event that can be used to signal an error.
+-   `worker()`: Downloads a whole file in a single chunk.
 
+## License
+
+The `pypdl` library is distributed under the MIT License. See the [LICENSE](https://github.com/m-jishnu/pypdl/blob/master/LICENSE) file for more information.
+
+## Contribution
+
+Contributions are welcome! If you encounter any issues or have suggestions for improvements, please open an issue on the [GitHub repository](https://github.com/m-jishnu/pypdl).
+
+## Contact
+
+For any inquiries or questions, you can reach out to the author via email at [jishnum499@gmail.com](mailto:jishnum499@gmail.com).

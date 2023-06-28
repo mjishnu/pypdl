@@ -7,7 +7,13 @@ import requests
 
 def timestring(sec):
     """
-    Converts seconds to a string formatted as HH:MM:SS
+    Converts seconds to a string formatted as HH:MM:SS.
+
+    Parameters:
+        sec (int): The number of seconds.
+
+    Returns:
+        str: The formatted time string in the format HH:MM:SS.
     """
     sec = int(sec)
     m, s = divmod(sec, 60)
@@ -17,40 +23,60 @@ def timestring(sec):
 
 class Multidown:
     """
-    Class for downloading a specific part of a file in multiple chunks
+    Class for downloading a specific part of a file in multiple chunks.
     """
 
     def __init__(self, dic, id, stop, error, headers):
+        """
+        Initializes the Multidown object.
+
+        Parameters:
+            dic (dict): Dictionary containing download information for all parts.
+                        Format: {start, curr, end, filepath, count, size, url, completed}
+            id (int): ID of this download part.
+            stop (threading.Event): Event to stop the download.
+            error (threading.Event): Event to indicate an error occurred.
+            headers (dict): User headers to be used in the download request.
+        """
         self.curr = 0  # current size of downloaded file
         self.completed = 0  # whether the download for this part is complete
         self.id = id  # ID of this download part
-        # dictionary containing download information for all parts, {start, curr, end, filepath, count, size, url, completed}
-        self.dic = dic
+        self.dic = dic  # dictionary containing download information for all parts
         self.stop = stop  # event to stop the download
         self.error = error  # event to indicate an error occurred
         self.headers = headers  # user headers
 
     def getval(self, key):
         """
-        Get the value of a key from the dictionary
+        Get the value of a key from the dictionary.
+
+        Parameters:
+            key (str): The key to retrieve the value for.
+
+        Returns:
+            Any: The value associated with the given key in the dictionary.
         """
         return self.dic[self.id][key]
 
     def setval(self, key, val):
         """
-        Set the value of a key in the dictionary
+        Set the value of a key in the dictionary.
+
+        Parameters:
+            key (str): The key to set the value for.
+            val (Any): The value to set for the given key.
         """
         self.dic[self.id][key] = val
 
     def worker(self):
         """
-        Download a part of the file in multiple chunks
+        Download a part of the file in multiple chunks.
         """
         filepath = self.getval("filepath")
         path = Path(filepath)
         end = self.getval("end")
 
-        # checks if the part exists if it doesn't exist set start from beginning else download rest of the file
+        # checks if the part exists, if it doesn't exist set start from the beginning, else download the rest of the file
         if not path.exists():
             start = self.getval("start")
         else:
@@ -65,13 +91,15 @@ class Multidown:
                 print("corrupted file!")
 
         url = self.getval("url")
-        self.headers.update({"range": f"bytes={start}-{end}"})
+        # not updating self.header because some wierd bug that cause the file to be unopenable
+        headers = {"range": f"bytes={start}-{end}"}
+        headers.update(self.headers)
 
         if self.curr != self.getval("size"):
             try:
                 # download part
                 with requests.session() as s, open(path, "ab+") as f:
-                    with s.get(url, headers=self.headers, stream=True, timeout=20) as r:
+                    with s.get(url, headers=headers, stream=True, timeout=20) as r:
                         for chunk in r.iter_content(1048576):  # 1MB
                             if chunk:
                                 f.write(chunk)
@@ -82,7 +110,8 @@ class Multidown:
             except Exception as e:
                 self.error.set()
                 time.sleep(1)
-                print(f"Error in thread {self.id}: ({e.__class__.__name__}, {e})")
+                print(
+                    f"Error in thread {self.id}: ({e.__class__.__name__}, {e})")
 
         if self.curr == self.getval("size"):
             self.completed = 1
@@ -91,10 +120,20 @@ class Multidown:
 
 class Singledown:
     """
-    Class for downloading a whole file in a single chunk
+    Class for downloading a whole file in a single chunk.
     """
 
     def __init__(self, url, path, stop, error, headers):
+        """
+        Initializes the Singledown object.
+
+        Parameters:
+            url (str): The URL of the file to download.
+            path (str): The path to save the downloaded file.
+            stop (threading.Event): Event to stop the download.
+            error (threading.Event): Event to indicate an error occurred.
+            headers (dict): User headers to be used in the download request.
+        """
         self.curr = 0  # current size of downloaded file
         self.completed = 0  # whether the download is complete
         self.url = url  # url of the file
@@ -105,7 +144,7 @@ class Singledown:
 
     def worker(self):
         """
-        Download a whole file in a single chunk
+        Download a whole file in a single chunk.
         """
         flag = True
         try:

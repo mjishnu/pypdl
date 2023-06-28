@@ -13,6 +13,14 @@ from utls import Multidown, Singledown, timestring
 
 class Downloader:
     def __init__(self, StopEvent=threading.Event(), headers={}):
+        """
+        Initializes the Downloader object.
+
+        Parameters:
+            StopEvent (threading.Event): Event to stop the download.
+            headers (dict): User headers to be used in the download request.
+        """
+        # private attributes
         # keep track of recent download speed
         self._recent = deque([0] * 12, maxlen=12)
         self._dic = {}  # dictionary to keep track of download progress
@@ -29,10 +37,20 @@ class Downloader:
         self.eta = "99:59:59"  # estimated time remaining for download completion
         self.remaining = 0  # amount of data remaining to be downloaded
         self.Stop = StopEvent  # event to signal download stop
-        self.headers = headers  # user defined headers
+        self.headers = headers  # user-defined headers
         self.Failed = False  # flag to indicate if download failure
 
     def download(self, url, filepath, num_connections, display, multithread):
+        """
+        Download a file from the given URL.
+
+        Parameters:
+            url (str): The URL of the file to download.
+            filepath (str): The file path to save the download.
+            num_connections (int): The number of connections to use for a multi-threaded download.
+            display (bool): Whether to display download progress.
+            multithread (bool): Whether to use multi-threaded download.
+        """
         # progress file to keep track of download progress
         json_file = Path(filepath + ".progress.json")
         threads = []
@@ -49,9 +67,9 @@ class Downloader:
         if self.totalMB < 50:
             num_connections = 5 if num_connections > 5 else num_connections
 
-        # if no range available in header or no size from header use single thread
+        # if no range available in header or no size from header, use single thread
         if not total or not head.headers.get("accept-ranges") or not multithread:
-            # create single threaded download object
+            # create single-threaded download object
             sd = Singledown(url, f_path, self.Stop, self._Error, self.headers)
             # create single download worker thread
             th = threading.Thread(target=sd.worker)
@@ -66,7 +84,10 @@ class Downloader:
                 # the object_hook converts the key strings whose value is int to type int
                 try:
                     progress = json.loads(
-                        json_file.read_text(), object_hook=lambda d: {int(k) if k.isdigit() else k: v for k, v in d.items()},)
+                        json_file.read_text(),
+                        object_hook=lambda d: {
+                            int(k) if k.isdigit() else k: v for k, v in d.items()},
+                    )
                 except:
                     pass
             segment = total / num_connections
@@ -81,10 +102,10 @@ class Downloader:
                     curr = progress[i]["curr"]
                     size = progress[i]["size"]
                 except:
-                    # if not able to use progress file then calculate the start, end, curr and size
+                    # if not able to use progress file, then calculate the start, end, curr, and size
                     # calculate the beginning byte offset by multiplying the segment by num_connections.
                     start = int(segment * i)
-                    # here end is the ((segment * next part ) - 1 byte) since the last byte is downloaded by next part except for the last part
+                    # here end is the ((segment * next part) - 1 byte) since the last byte is downloaded by next part except for the last part
                     end = int(segment * (i + 1)) - (i != num_connections - 1)
                     curr = start
                     size = end - start + (i != num_connections - 1)
@@ -100,7 +121,7 @@ class Downloader:
                 }
                 # create multidownload object for each connection
                 md = Multidown(self._dic, i, self.Stop,
-                               self._Error, self.headers)
+                            self._Error, self.headers)
                 # create worker thread for each connection
                 th = threading.Thread(target=md.worker)
                 threads.append(th)
@@ -156,11 +177,17 @@ class Downloader:
                 if display:
                     if not singlethread:
                         dynamic_print[0] = (
-                            "[{0}{1}] {2}".format("\u2588" * self.progress, "\u00b7" * (100 - self.progress), str(self.progress),) + "%")
-                        dynamic_print[1] = f"Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s, ETA: {self.eta}"
+                            "[{0}{1}] {2}".format(
+                                "\u2588" * self.progress,
+                                "\u00b7" * (100 - self.progress),
+                                str(self.progress),
+                            )
+                            + "%"
+                        )
+                        dynamic_print[1] = f"Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
                     else:
                         dynamic_print[0] = "Downloading..."
-                        dynamic_print[1] = f"Downloaded: {self.doneMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s"
+                        dynamic_print[1] = f"Downloaded: {self.doneMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s"
 
                 # check if download has been stopped or if an error has occurred
                 if self.Stop.is_set() or self._Error.is_set():
@@ -203,6 +230,9 @@ class Downloader:
             print(f"Time elapsed: {timestring(self.time_spent)}")
 
     def stop(self):
+        """
+        Stop the download process.
+        """
         self.Stop.set()
 
     def start(
@@ -232,19 +262,19 @@ class Downloader:
 
         def start_thread():
             try:
-                # start the download
+                # start the download, not using "try" since all expected errors and will trigger error event
                 self.download(url, filepath, num_connections,
-                              display, multithread)
+                            display, multithread)
                 # retry the download if there are errors
                 for _ in range(retries):
                     if self._Error.is_set():
                         time.sleep(3)
                         # reset the downloader object
-                        self.__init__(self.Stop)
+                        self.__init__(self.Stop, self.headers)
 
                         # get a new download URL to retry
                         _url = url
-                        if retry_func:
+                        if callable(retry_func):
                             try:
                                 _url = retry_func()
                             except Exception as e:
@@ -255,7 +285,7 @@ class Downloader:
                             print("retrying...")
                         # restart the download
                         self.download(_url, filepath, num_connections,
-                                      display, multithread)
+                                    display, multithread)
                     else:
                         break
             # if there's an error, set the error event and print the error message

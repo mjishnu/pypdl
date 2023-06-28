@@ -1,3 +1,4 @@
+import os
 import time
 from pathlib import Path
 
@@ -11,7 +12,7 @@ def timestring(sec):
     sec = int(sec)
     m, s = divmod(sec, 60)
     h, m = divmod(m, 60)
-    return f'{h:02d}:{m:02d}:{s:02d}'
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
 
 class Multidown:
@@ -19,7 +20,7 @@ class Multidown:
     Class for downloading a specific part of a file in multiple chunks
     """
 
-    def __init__(self, dic, id, stop, error):
+    def __init__(self, dic, id, stop, error, headers):
         self.curr = 0  # current size of downloaded file
         self.completed = 0  # whether the download for this part is complete
         self.id = id  # ID of this download part
@@ -27,6 +28,7 @@ class Multidown:
         self.dic = dic
         self.stop = stop  # event to stop the download
         self.error = error  # event to indicate an error occurred
+        self.headers = headers  # user headers
 
     def getval(self, key):
         """
@@ -44,41 +46,47 @@ class Multidown:
         """
         Download a part of the file in multiple chunks
         """
-        filepath = self.getval('filepath')
+        filepath = self.getval("filepath")
         path = Path(filepath)
-        end = self.getval('end')
+        end = self.getval("end")
 
         # checks if the part exists if it doesn't exist set start from beginning else download rest of the file
         if not path.exists():
-            start = self.getval('start')
+            start = self.getval("start")
         else:
             # gets the size of the file
             self.curr = path.stat().st_size
-            start = self.getval('start') + self.curr
+            # add the old start size and the current size to get the new start size
+            start = self.getval("start") + self.curr
+            # corruption check to make sure parts are not corrupted
+            if start > end:
+                os.remove(path)
+                self.error.set()
+                print("corrupted file!")
 
-        url = self.getval('url')
-        if self.curr != self.getval('size'):
+        url = self.getval("url")
+        self.headers.update({"range": f"bytes={start}-{end}"})
+
+        if self.curr != self.getval("size"):
             try:
                 # download part
-                with requests.session() as s, open(path, 'ab+') as f:
-                    headers = {"range": f"bytes={start}-{end}"}
-                    with s.get(url, headers=headers, stream=True, timeout=20) as r:
+                with requests.session() as s, open(path, "ab+") as f:
+                    with s.get(url, headers=self.headers, stream=True, timeout=20) as r:
                         for chunk in r.iter_content(1048576):  # 1MB
                             if chunk:
                                 f.write(chunk)
                                 self.curr += len(chunk)
-                                self.setval('curr', self.curr)
+                                self.setval("curr", self.curr)
                             if not chunk or self.stop.is_set() or self.error.is_set():
                                 break
             except Exception as e:
                 self.error.set()
                 time.sleep(1)
-                print(
-                    f"Error in thread {self.id}: ({e.__class__.__name__}, {e})")
+                print(f"Error in thread {self.id}: ({e.__class__.__name__}, {e})")
 
-        if self.curr == self.getval('size'):
+        if self.curr == self.getval("size"):
             self.completed = 1
-            self.setval('completed', 1)
+            self.setval("completed", 1)
 
 
 class Singledown:
@@ -86,27 +94,34 @@ class Singledown:
     Class for downloading a whole file in a single chunk
     """
 
-    def __init__(self):
+    def __init__(self, url, path, stop, error, headers):
         self.curr = 0  # current size of downloaded file
         self.completed = 0  # whether the download is complete
+        self.url = url  # url of the file
+        self.path = path  # path to save the file
+        self.stop = stop  # event to stop the download
+        self.error = error  # event to indicate an error occurred
+        self.headers = headers  # user headers
 
-    def worker(self, url, path, stop, error):
+    def worker(self):
         """
         Download a whole file in a single chunk
         """
         flag = True
         try:
             # download part
-            with requests.get(url, stream=True, timeout=20) as r, open(path, 'wb') as file:
+            with requests.get(
+                self.url, stream=True, timeout=20, headers=self.headers
+            ) as r, open(self.path, "wb") as file:
                 for chunk in r.iter_content(1048576):  # 1MB
                     if chunk:
                         file.write(chunk)
                         self.curr += len(chunk)
-                    if not chunk or stop.is_set() or error.is_set():
+                    if not chunk or self.stop.is_set() or self.error.is_set():
                         flag = False
                         break
         except Exception as e:
-            error.set()
+            self.error.set()
             time.sleep(1)
             print(f"Error in thread {self.id}: ({e.__class__.__name__}: {e})")
         if flag:

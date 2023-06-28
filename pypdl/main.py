@@ -13,7 +13,8 @@ from utls import Multidown, Singledown, timestring
 
 class Downloader:
     def __init__(self, StopEvent=threading.Event(), headers={}):
-        self._recent = deque([0] * 12, maxlen=12)  # keep track of recent download speed
+        # keep track of recent download speed
+        self._recent = deque([0] * 12, maxlen=12)
         self._dic = {}  # dictionary to keep track of download progress
         self._workers = []  # list of download worker threads
         self._Error = threading.Event()  # event to signal any download errors
@@ -32,15 +33,14 @@ class Downloader:
         self.Failed = False  # flag to indicate if download failure
 
     def download(self, url, filepath, num_connections, display, multithread):
-        json_file = Path(
-            filepath + ".progress.json"
-        )  # progress file to keep track of download progress
+        # progress file to keep track of download progress
+        json_file = Path(filepath + ".progress.json")
         threads = []
         f_path = str(filepath)
-        head = requests.head(url, timeout=20)  # get the header information for the file
-        total = int(
-            head.headers.get("content-length")
-        )  # get the total size of the file from the header
+        # get the header information for the file
+        head = requests.head(url, timeout=20)
+        # get the total size of the file from the header
+        total = int(head.headers.get("content-length"))
         self.totalMB = total / 1048576  # 1MB = 1048576 bytes (size in MB)
         started = datetime.now()
         singlethread = False
@@ -66,11 +66,7 @@ class Downloader:
                 # the object_hook converts the key strings whose value is int to type int
                 try:
                     progress = json.loads(
-                        json_file.read_text(),
-                        object_hook=lambda d: {
-                            int(k) if k.isdigit() else k: v for k, v in d.items()
-                        },
-                    )
+                        json_file.read_text(), object_hook=lambda d: {int(k) if k.isdigit() else k: v for k, v in d.items()},)
                 except:
                     pass
             segment = total / num_connections
@@ -103,11 +99,11 @@ class Downloader:
                     "completed": False,
                 }
                 # create multidownload object for each connection
-                md = Multidown(self._dic, i, self.Stop, self._Error, self.headers)
+                md = Multidown(self._dic, i, self.Stop,
+                               self._Error, self.headers)
                 # create worker thread for each connection
                 th = threading.Thread(target=md.worker)
                 threads.append(th)
-                time.sleep(1)
                 th.start()
                 self._workers.append(md)
 
@@ -142,7 +138,7 @@ class Downloader:
                 if not gt0:
                     self.speed = 0
                 else:
-                    recent = list(self._recent)[12 - gt0 :]
+                    recent = list(self._recent)[12 - gt0:]
                     if len(recent) == 1:
                         self.speed = recent[0] / 1048576 / interval
                     else:
@@ -158,19 +154,13 @@ class Downloader:
 
                 # print dynamic progress output
                 if display:
-                    dynamic_print[0] = (
-                        "[{0}{1}] {2}".format(
-                            "\u2588" * self.progress,
-                            "\u00b7" * (100 - self.progress),
-                            str(self.progress),
-                        )
-                        + "%"
-                        if total != inf
-                        else "Downloading..."
-                    )
-                    dynamic_print[
-                        1
-                    ] = f"Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s, ETA: {self.eta}"
+                    if not singlethread:
+                        dynamic_print[0] = (
+                            "[{0}{1}] {2}".format("\u2588" * self.progress, "\u00b7" * (100 - self.progress), str(self.progress),) + "%")
+                        dynamic_print[1] = f"Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s, ETA: {self.eta}"
+                    else:
+                        dynamic_print[0] = "Downloading..."
+                        dynamic_print[1] = f"Downloaded: {self.doneMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed :.2f} MB/s"
 
                 # check if download has been stopped or if an error has occurred
                 if self.Stop.is_set() or self._Error.is_set():
@@ -243,7 +233,8 @@ class Downloader:
         def start_thread():
             try:
                 # start the download
-                self.download(url, filepath, num_connections, display, multithread)
+                self.download(url, filepath, num_connections,
+                              display, multithread)
                 # retry the download if there are errors
                 for _ in range(retries):
                     if self._Error.is_set():
@@ -258,15 +249,13 @@ class Downloader:
                                 _url = retry_func()
                             except Exception as e:
                                 print(
-                                    f"Retry function Error: ({e.__class__.__name__}, {e})"
-                                )
+                                    f"Retry function Error: ({e.__class__.__name__}, {e})")
 
                         if display:
                             print("retrying...")
                         # restart the download
-                        self.download(
-                            _url, filepath, num_connections, display, multithread
-                        )
+                        self.download(_url, filepath, num_connections,
+                                      display, multithread)
                     else:
                         break
             # if there's an error, set the error event and print the error message

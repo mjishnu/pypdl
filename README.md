@@ -218,7 +218,7 @@ The `Singledown` class represents a download worker that is responsible for down
 
 ## License
 
-The `pypdl` library is distributed under the MIT License. See the [LICENSE](https://github.com/m-jishnu/pypdl/blob/master/LICENSE) file for more information.
+The `pypdl` library is distributed under the MIT License. See the [LICENSE](https://github.com/m-jishnu/pypdl/blob/main/LICENSE) file for more information.
 
 ## Contribution
 

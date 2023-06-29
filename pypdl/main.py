@@ -155,11 +155,11 @@ class Downloader:
                     self.progress = 0
 
                 # calculate download speed
-                gt0 = len([i for i in self._recent if i])
-                if not gt0:
+                recent_speed = len([i for i in self._recent if i])
+                if not recent_speed:
                     self.speed = 0
                 else:
-                    recent = list(self._recent)[12 - gt0:]
+                    recent = list(self._recent)[12 - recent_speed:]
                     if len(recent) == 1:
                         self.speed = recent[0] / 1048576 / interval
                     else:

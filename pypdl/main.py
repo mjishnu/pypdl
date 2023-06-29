@@ -12,7 +12,7 @@ from .utls import Multidown, Singledown, timestring
 
 
 class Downloader:
-    def __init__(self, StopEvent=threading.Event(), headers={}):
+    def __init__(self, StopEvent=None, headers=None):
         """
         Initializes the Downloader object.
 
@@ -36,8 +36,8 @@ class Downloader:
         self.doneMB = 0  # amount of data downloaded in MB
         self.eta = "99:59:59"  # estimated time remaining for download completion
         self.remaining = 0  # amount of data remaining to be downloaded
-        self.Stop = StopEvent  # event to signal download stop
-        self.headers = headers  # user-defined headers
+        self.Stop = StopEvent if StopEvent else threading.Event() # event to signal download stop
+        self.headers = headers if headers else {} # user-defined headers
         self.Failed = False  # flag to indicate if download failure
 
     def download(self, url, filepath, num_connections, display, multithread):
@@ -142,7 +142,7 @@ class Downloader:
                     # save progress to progress file
                     json_file.write_text(json.dumps(self._dic, indent=4))
                 # check if all workers have completed
-                status = sum([i.completed for i in self._workers])
+                status = sum(i.completed for i in self._workers)
                 # get the total amount of data downloaded
                 downloaded = sum(i.curr for i in self._workers)
                 self.doneMB = downloaded / 1048576
@@ -226,7 +226,7 @@ class Downloader:
         # print download result
         if display:
             if self.Stop.is_set():
-                print(f"Task interrupted!")
+                print("Task interrupted!")
             print(f"Time elapsed: {timestring(self.time_spent)}")
 
     def stop(self):

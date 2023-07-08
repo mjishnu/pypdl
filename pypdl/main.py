@@ -5,14 +5,16 @@ from collections import deque
 from datetime import datetime
 from math import inf
 from pathlib import Path
+from typing import Callable, Dict, List, Optional, Union
 
 import requests
 from reprint import output
+
 from .utls import Multidown, Singledown, timestring
 
 
 class Downloader:
-    def __init__(self, StopEvent=None, headers=None):
+    def __init__(self, StopEvent: Optional[threading.Event] = None, headers: Optional[Dict[str, str]] = None):
         """
         Initializes the Downloader object.
 
@@ -23,8 +25,8 @@ class Downloader:
         # private attributes
         # keep track of recent download speed
         self._recent = deque([0] * 12, maxlen=12)
-        self._dic = {}  # dictionary to keep track of download progress
-        self._workers = []  # list of download worker threads
+        self._dic: Dict[Union[str, int], Union[int, bool, str, Dict[str, Union[str, int, bool]]]] = {}  # dictionary to keep track of download progress
+        self._workers: List[Union[Multidown, Singledown]] = []  # list of download worker threads
         self._Error = threading.Event()  # event to signal any download errors
 
         # public attributes
@@ -32,7 +34,7 @@ class Downloader:
         self.progress = 0  # download progress percentage
         self.speed = 0  # download speed in MB/s
         self.download_mode = ""  # download mode: single-threaded or multi-threaded
-        self.time_spent = None  # time spent downloading
+        self.time_spent: Optional[float] = None  # time spent downloading
         self.doneMB = 0  # amount of data downloaded in MB
         self.eta = "99:59:59"  # estimated time remaining for download completion
         self.remaining = 0  # amount of data remaining to be downloaded
@@ -40,7 +42,7 @@ class Downloader:
         self.headers = headers if headers else {} # user-defined headers
         self.Failed = False  # flag to indicate if download failure
 
-    def download(self, url, filepath, num_connections, display, multithread):
+    def download(self, url: str, filepath: str, num_connections: int, display: bool, multithread: bool):
         """
         Download a file from the given URL.
 
@@ -237,14 +239,14 @@ class Downloader:
 
     def start(
         self,
-        url,
-        filepath,
-        num_connections=10,
-        display=True,
-        multithread=True,
-        block=True,
-        retries=0,
-        retry_func=None,
+        url: str,
+        filepath: str,
+        num_connections: int = 10,
+        display: bool = True,
+        multithread: bool = True,
+        block: bool = True,
+        retries: int = 0,
+        retry_func: Optional[Callable[[], str]] = None,
     ):
         """
         Start the download process.

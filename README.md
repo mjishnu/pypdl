@@ -226,4 +226,4 @@ Contributions are welcome! If you encounter any issues or have suggestions for i
 
 ## Contact
 
-For any inquiries or questions, you can reach out to the author via email at [jishnum499@gmail.com](mailto:jishnum499@gmail.com).
+For any inquiries or questions, you can reach out to the author via email at [mjishnu@skiff.com](mailto:mjishnu@skiff.com).

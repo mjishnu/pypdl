@@ -1,11 +1,13 @@
 import os
+import threading
 import time
 from pathlib import Path
+from typing import Any, Dict, Union
 
 import requests
 
 
-def timestring(sec):
+def timestring(sec: int) -> str:
     """
     Converts seconds to a string formatted as HH:MM:SS.
 
@@ -26,7 +28,8 @@ class Multidown:
     Class for downloading a specific part of a file in multiple chunks.
     """
 
-    def __init__(self, dic, id, stop, error, headers):
+    def __init__(self, dic: Dict[Union[str, int], Union[int, bool, str, Dict[str, Union[str, int, bool]]]], id: int,
+                 stop: threading.Event, error: threading.Event, headers: Dict[str, str]):
         """
         Initializes the Multidown object.
 
@@ -46,7 +49,7 @@ class Multidown:
         self.error = error  # event to indicate an error occurred
         self.headers = headers  # user headers
 
-    def getval(self, key):
+    def getval(self, key: str) -> Any:
         """
         Get the value of a key from the dictionary.
 
@@ -58,7 +61,7 @@ class Multidown:
         """
         return self.dic[self.id][key]
 
-    def setval(self, key, val):
+    def setval(self, key: str, val: Any):
         """
         Set the value of a key in the dictionary.
 
@@ -123,7 +126,7 @@ class Singledown:
     Class for downloading a whole file in a single chunk.
     """
 
-    def __init__(self, url, path, stop, error, headers):
+    def __init__(self, url: str, path: str, stop: threading.Event, error: threading.Event, headers: Dict[str, str]):
         """
         Initializes the Singledown object.
 

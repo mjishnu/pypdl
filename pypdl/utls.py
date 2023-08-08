@@ -94,7 +94,7 @@ class Multidown:
                 print("corrupted file!")
 
         url = self.getval("url")
-        # not updating self.header because some wierd bug that cause the file to be unopenable
+        # not updating self.header because it will reference the orginal headers dict and adding to it will cause bugs
         headers = {"range": f"bytes={start}-{end}"}
         headers.update(self.headers)
 

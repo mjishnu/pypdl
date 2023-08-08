@@ -58,7 +58,7 @@ class Downloader:
         threads = []
         f_path = str(filepath)
         # get the header information for the file
-        head = requests.head(url, timeout=20)
+        head = requests.head(url, timeout=20, allow_redirects=True)
         # get the total size of the file from the header
         total = int(head.headers.get("content-length"))
         self.totalMB = total / 1048576  # 1MB = 1048576 bytes (size in MB)

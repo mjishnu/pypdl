@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '1.0.4'
+VERSION = '1.0.5'
 DESCRIPTION = 'A concurrent python download manager'
 with open("README.md", "r") as f:
     LONG_DESCRIPTION = f.read()

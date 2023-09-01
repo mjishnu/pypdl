@@ -64,7 +64,14 @@ def main():
     dl = Downloader()
 
     # Use custom headers to set user-agent
-    dl.headers = {User-Agent:"Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0"}
+    dl.headers = {"User-Agent":"Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0"}
+    # Use custom proxies
+    dl.proxies = {
+                    "http": "http://10.10.1.10:3128",
+                    "https": "https://10.10.1.10:1080",
+                }
+    # Use authentication for proxy
+    dl.auth = ("user","pass")
 
     # start the download
     dl.start(
@@ -132,6 +139,8 @@ The `Downloader` class represents a file downloader that can download a file fro
 
 -   `StopEvent`: An optional parameter to set custom a stop event.
 -   `header`: An optional parameter to set custom header. (Note: Never use custom "range" header if using multithread = True)
+-   `proxies`: An optional parameter to set custom proxies.
+-   `auth`: An optional parameter to set authentication for proxies.
 
 #### Attributes
 
@@ -145,6 +154,8 @@ The `Downloader` class represents a file downloader that can download a file fro
 -   `remaining`: The amount of data remaining to be downloaded, in MB.
 -   `Stop`: An event that can be used to stop the download process.
 -   `headers`: A dictionary containing user headers.
+-   `proxies`: A dictionary containing user proxies.
+-   `auth`: A tuple containing authentication for proxies.
 -   `Failed`: A flag that indicates if the download failed.
 
 #### Methods
@@ -173,6 +184,8 @@ The `Multidown` class represents a download worker that is responsible for downl
 -   `stop`: Stop event.
 -   `error`: Error event.
 -   `headers`: Custom headers.
+-   `proxies`: Custom proxies.
+-   `auth`: Authentication for proxies.
 
 ##### Attributes
 
@@ -183,6 +196,8 @@ The `Multidown` class represents a download worker that is responsible for downl
 -   `stop`: An event that can be used to stop the download process.
 -   `error`: An event that can be used to signal an error.
 -   `headers`: A dictionary containing user headers.
+-   `proxies`: A dictionary containing user proxies.
+-   `auth`: A tuple containing authentication for proxies.
 
 ##### Methods
 
@@ -201,6 +216,8 @@ The `Singledown` class represents a download worker that is responsible for down
 -   `stop`: Stop event.
 -   `error`: Error event.
 -   `headers`: User headers.
+-   `proxies`: Custom proxies.
+-   `auth`: Authentication for proxies.
 
 ##### Attributes
 
@@ -211,6 +228,8 @@ The `Singledown` class represents a download worker that is responsible for down
 -   `stop`: Event to stop the download.
 -   `error`: Event to indicate an error occurred.
 -   `headers`: Custom user headers.
+-   `proxies`: A dictionary containing user proxies.
+-   `auth`: A tuple containing authentication for proxies.
 
 ##### Methods
 

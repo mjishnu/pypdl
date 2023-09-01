@@ -5,28 +5,31 @@ from collections import deque
 from datetime import datetime
 from math import inf
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional
 
 import requests
 from reprint import output
 
-from .utls import Multidown, Singledown, timestring
+from utls import Multidown, Singledown, timestring
 
 
 class Downloader:
-    def __init__(self, StopEvent: Optional[threading.Event] = None, headers: Optional[Dict[str, str]] = None):
+    def __init__(self, StopEvent = threading.Event(), headers={}, proxies=None, auth=None):
         """
         Initializes the Downloader object.
 
         Parameters:
             StopEvent (threading.Event): Event to stop the download.
             headers (dict): User headers to be used in the download request.
+            proxies (dict): An optional parameter to set custom proxies.
+            auth (tuple): An optional parameter to set authentication for proxies.
+            
         """
         # private attributes
         # keep track of recent download speed
         self._recent = deque([0] * 12, maxlen=12)
-        self._dic: Dict[Union[str, int], Union[int, bool, str, Dict[str, Union[str, int, bool]]]] = {}  # dictionary to keep track of download progress
-        self._workers: List[Union[Multidown, Singledown]] = []  # list of download worker threads
+        self._dic = {}  # dictionary to keep track of download progress
+        self._workers = []  # list of download worker threads
         self._Error = threading.Event()  # event to signal any download errors
 
         # public attributes
@@ -38,13 +41,15 @@ class Downloader:
         self.doneMB = 0  # amount of data downloaded in MB
         self.eta = "99:59:59"  # estimated time remaining for download completion
         self.remaining = 0  # amount of data remaining to be downloaded
-        self.Stop = StopEvent if StopEvent else threading.Event() # event to signal download stop
-        self.headers = headers if headers else {} # user-defined headers
+        self.Stop = StopEvent # event to stop the download
+        self.headers = headers # headers to be used in the download request
+        self.proxies = proxies # proxies to be used in the download request
+        self.auth = auth # proxy auth to be used in the download request
         self.Failed = False  # flag to indicate if download failure
 
-    def download(self, url: str, filepath: str, num_connections: int, display: bool, multithread: bool):
+    def _download(self, url: str, filepath: str, num_connections: int, display: bool, multithread: bool):
         """
-        Download a file from the given URL.
+        Internal download function.
 
         Parameters:
             url (str): The URL of the file to download.
@@ -72,7 +77,7 @@ class Downloader:
         # if no range available in header or no size from header, use single thread
         if not total or not head.headers.get("accept-ranges") or not multithread:
             # create single-threaded download object
-            sd = Singledown(url, f_path, self.Stop, self._Error, self.headers)
+            sd = Singledown(url, f_path, self.Stop, self._Error, self.headers, self.proxies, self.auth)
             # create single download worker thread
             th = threading.Thread(target=sd.worker)
             self._workers.append(sd)
@@ -123,7 +128,7 @@ class Downloader:
                 }
                 # create multidownload object for each connection
                 md = Multidown(self._dic, i, self.Stop,
-                            self._Error, self.headers)
+                            self._Error, self.headers, self.proxies, self.auth)
                 # create worker thread for each connection
                 th = threading.Thread(target=md.worker)
                 threads.append(th)
@@ -265,14 +270,14 @@ class Downloader:
         def start_thread():
             try:
                 # start the download, not using "try" since all expected errors and will trigger error event
-                self.download(url, filepath, num_connections,
+                self._download(url, filepath, num_connections,
                             display, multithread)
                 # retry the download if there are errors
                 for _ in range(retries):
                     if self._Error.is_set():
                         time.sleep(3)
                         # reset the downloader object
-                        self.__init__(self.Stop, self.headers)
+                        self.__init__(self.Stop, self.headers, self.proxies, self.auth)
 
                         # get a new download URL to retry
                         _url = url
@@ -286,7 +291,7 @@ class Downloader:
                         if display:
                             print("retrying...")
                         # restart the download
-                        self.download(_url, filepath, num_connections,
+                        self._download(_url, filepath, num_connections,
                                     display, multithread)
                     else:
                         break
@@ -301,7 +306,7 @@ class Downloader:
                 print("Download Failed!")
 
         # Initialize the downloader with stop Event
-        self.__init__(self.Stop, self.headers)
+        self.__init__(self.Stop, self.headers, self.proxies, self.auth)
         self.Stop.clear()
         # Start the download process in a new thread
         th = threading.Thread(target=start_thread)

@@ -109,8 +109,8 @@ dl = Downloader(stop)
 dl.start('https://example.com/file.zip', 'file.zip', num_connections=8,block=False,display=False)
 
 # print the progress
-while d.progress != 70:
-  print(d.progress)
+while dl.progress != 70:
+  print(dl.progress)
 
 # stop the download process
 stop.set() # can also be done by calling d.stop()
@@ -122,8 +122,8 @@ stop.set() # can also be done by calling d.stop()
 dl.start('https://example.com/file.zip', 'file.zip', num_connections=8,block=False,display=False)
 
 # print rest of the progress
-while d.progress != 100:
-  print(d.progress)
+while dl.progress != 100:
+  print(dl.progress)
 
 ```
 

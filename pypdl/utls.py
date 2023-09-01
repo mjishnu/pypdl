@@ -29,7 +29,7 @@ class Multidown:
     """
 
     def __init__(self, dic: Dict, id: int,
-                 stop: threading.Event, error: threading.Event, headers: Dict[str, str], proxies: Dict[str, str],auth: Tuple[str, str]):
+                 stop: threading.Event, error: threading.Event, headers: Dict[str, str], proxies: Dict[str, str], auth: Tuple[str, str]):
         """
         Initializes the Multidown object.
 

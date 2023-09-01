@@ -23,7 +23,7 @@ class Downloader:
             headers (dict): User headers to be used in the download request.
             proxies (dict): An optional parameter to set custom proxies.
             auth (tuple): An optional parameter to set authentication for proxies.
-            
+
         """
         # private attributes
         # keep track of recent download speed

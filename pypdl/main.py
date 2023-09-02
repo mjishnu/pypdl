@@ -10,7 +10,7 @@ from typing import Callable, Optional
 import requests
 from reprint import output
 
-from utls import Multidown, Singledown, timestring
+from .utls import Multidown, Singledown, timestring
 
 
 class Downloader:

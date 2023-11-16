@@ -10,6 +10,15 @@ from requests.structures import CaseInsensitiveDict
 
 
 def get_filename_from_headers(headers: CaseInsensitiveDict[str]):
+    """
+    Extracts desired file name from given Content-Disposition header
+
+    Parameters:
+        headers (dict): headers from requests.head or requests.get response
+
+    Returns:
+        Desired file name
+    """
     content_disposition = headers.get('Content-Disposition')
 
     if content_disposition and 'filename=' in content_disposition:
@@ -20,8 +29,7 @@ def get_filename_from_headers(headers: CaseInsensitiveDict[str]):
         # Decode URL encoding
         filename = unquote(filename)
         return filename
-    else:
-        return None
+    return None
 
 
 def timestring(sec: int) -> str:

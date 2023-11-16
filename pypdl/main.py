@@ -266,7 +266,7 @@ class Downloader:
     def start(
         self,
         url: str,
-        filepath: Optional[str],
+        filepath: Optional[str] = None,
         num_connections: int = 10,
         display: bool = True,
         multithread: bool = True,

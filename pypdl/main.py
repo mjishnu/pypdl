@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import threading
 import time
@@ -54,7 +55,7 @@ class Downloader:
 
         Parameters:
             url (str): The URL of the file to download.
-            filepath (str): The file path to save the download.
+            filepath (str): The file path to save the download. If it is directory or None then filepath is appended with file name.
             num_connections (int): The number of connections to use for a multi-threaded download.
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.
@@ -65,15 +66,21 @@ class Downloader:
                              headers=self.headers,
                              proxies=self.proxies,
                              auth=self.auth)
-        # if filepath not specified, try to get it from headers
-        if filepath is None:
-            filepath = get_filename_from_headers(head.headers)
-        # if filepath couldn't be retrieved from headers, generate temporary file
-        if filepath is None:
+        # get file name from headers
+        filename = get_filename_from_headers(head.headers)
+        # if file name couldn't be retrieved from headers, generate temporary file
+        if filename is None:
             # trick to generate temporary filename without creating a handle to it
             # https://stackoverflow.com/a/45803022
             with tempfile.TemporaryFile() as tmp:
-                filepath = tmp.name
+                filename = tmp.name
+        # if filepath not specified, try to get file name from headers
+        if filepath is None:
+            filepath = filename
+        # if filepath is a directory, try to get file name
+        elif os.path.isdir(filepath):
+            filepath = os.path.join(filepath, filename)
+
         # progress file to keep track of download progress
         json_file = Path(filepath + ".progress.json")
         threads = []
@@ -272,7 +279,7 @@ class Downloader:
 
         Parameters:
             url (str): The download URL.
-            filepath (str): The optional file path to save the download.
+            filepath (str): The optional file path to save the download. If it is directory or None then filepath is appended with file name.
             num_connections (int): The number of connections to use for a multi-threaded download.
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.

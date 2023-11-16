@@ -3,8 +3,25 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
+from urllib.parse import unquote
 
 import requests
+from requests.structures import CaseInsensitiveDict
+
+
+def get_filename_from_headers(headers: CaseInsensitiveDict[str]):
+    content_disposition = headers.get('Content-Disposition')
+
+    if content_disposition and 'filename=' in content_disposition:
+        filename_start = content_disposition.index('filename=') + len('filename=')
+        filename = content_disposition[filename_start:]
+        # Remove quotes and any leading or trailing spaces
+        filename = filename.strip(' "')
+        # Decode URL encoding
+        filename = unquote(filename)
+        return filename
+    else:
+        return None
 
 
 def timestring(sec: int) -> str:

@@ -1,4 +1,5 @@
 import json
+import tempfile
 import threading
 import time
 from collections import deque
@@ -10,7 +11,7 @@ from typing import Callable, Optional
 import requests
 from reprint import output
 
-from .utls import Multidown, Singledown, timestring
+from .utls import Multidown, Singledown, timestring, get_filename_from_headers
 
 
 class Downloader:
@@ -58,12 +59,25 @@ class Downloader:
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.
         """
+        # get the header information for the file
+        head = requests.head(url, timeout=20,
+                             allow_redirects=True,
+                             headers=self.headers,
+                             proxies=self.proxies,
+                             auth=self.auth)
+        # if filepath not specified, try to get it from headers
+        if filepath is None:
+            filepath = get_filename_from_headers(head.headers)
+        # if filepath couldn't be retrieved from headers, generate temporary file
+        if filepath is None:
+            # trick to generate temporary filename without creating a handle to it
+            # https://stackoverflow.com/a/45803022
+            with tempfile.TemporaryFile() as tmp:
+                filepath = tmp.name
         # progress file to keep track of download progress
         json_file = Path(filepath + ".progress.json")
         threads = []
         f_path = str(filepath)
-        # get the header information for the file
-        head = requests.head(url, timeout=20, allow_redirects=True)
         # get the total size of the file from the header
         total = int(head.headers.get("content-length"))
         self.totalMB = total / 1048576  # 1MB = 1048576 bytes (size in MB)
@@ -245,7 +259,7 @@ class Downloader:
     def start(
         self,
         url: str,
-        filepath: str,
+        filepath: Optional[str],
         num_connections: int = 10,
         display: bool = True,
         multithread: bool = True,
@@ -258,7 +272,7 @@ class Downloader:
 
         Parameters:
             url (str): The download URL.
-            filepath (str): The file path to save the download.
+            filepath (str): The optional file path to save the download.
             num_connections (int): The number of connections to use for a multi-threaded download.
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.

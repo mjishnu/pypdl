@@ -323,8 +323,8 @@ class Downloader:
 
         Parameters:
             url (str): The download URL.
-            filepath (str): The optional file path to save the download.
-                If it is directory or None then filepath is appended with file name.
+            filepath (str): The optional file path to save the download. by default it uses the present working directory,
+                If filepath a is directory then the file is downloaded into the it else the file is downloaded with the given name.
             num_connections (int): The number of connections to use for a multi-threaded download.
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.

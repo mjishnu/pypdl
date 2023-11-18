@@ -20,14 +20,11 @@ from .utls import (
 
 
 class Downloader:
-    def __init__(
-        self, StopEvent=threading.Event(), headers={}, proxies=None, auth=None
-    ):
+    def __init__(self, headers={}, proxies=None, auth=None):
         """
         Initializes the Downloader object.
 
         Parameters:
-            StopEvent (threading.Event): Event to stop the download.
             headers (dict): User headers to be used in the download request.
             proxies (dict): An optional parameter to set custom proxies.
             auth (tuple): An optional parameter to set authentication for proxies.
@@ -40,6 +37,7 @@ class Downloader:
         self._workers = []  # list of multidownload object objects
         self._Error = threading.Event()  # event to signal any download errors
         self._threads = []  # list of all worker threads
+        self._stop = threading.Event()  # event to stop the download
 
         # public attributes
         self.totalMB = 0  # total download size in MB
@@ -50,7 +48,6 @@ class Downloader:
         self.doneMB = 0  # amount of data downloaded in MB
         self.eta = "99:59:59"  # estimated time remaining for download completion
         self.remaining = 0  # amount of data remaining to be downloaded
-        self.Stop = StopEvent  # event to stop the download
         self.headers = headers  # headers to be used in the download request
         self.proxies = proxies  # proxies to be used in the download request
         self.auth = auth  # proxy auth to be used in the download request
@@ -120,7 +117,7 @@ class Downloader:
             sd = Singledown(
                 url,
                 f_path,
-                self.Stop,
+                self._stop,
                 self._Error,
                 self.headers,
                 self.proxies,
@@ -179,7 +176,7 @@ class Downloader:
                 md = Multidown(
                     self._dic,
                     i,
-                    self.Stop,
+                    self._stop,
                     self._Error,
                     self.headers,
                     self.proxies,
@@ -258,7 +255,7 @@ class Downloader:
                         ] = f"Downloaded: {self.doneMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s"
 
                 # check if download has been stopped or if an error has occurred
-                if self.Stop.is_set() or self._Error.is_set():
+                if self._stop.is_set() or self._Error.is_set():
                     self._dic["paused"] = True
                     if not singlethread:
                         # save progress to progress file
@@ -293,7 +290,7 @@ class Downloader:
 
         # print download result
         if display:
-            if self.Stop.is_set():
+            if self._stop.is_set():
                 print("Task interrupted!")
             print(f"Time elapsed: {timestring(self.time_spent)}")
 
@@ -302,7 +299,7 @@ class Downloader:
         Stop the download process.
         """
         time.sleep(3)
-        self.Stop.set()
+        self._stop.set()
         # waiting for all threads to be killed by the poison pill
         for thread in self._threads:
             thread.join()
@@ -342,7 +339,7 @@ class Downloader:
                     if self._Error.is_set():
                         time.sleep(3)
                         # reset the downloader object
-                        self.__init__(self.Stop, self.headers, self.proxies, self.auth)
+                        self.__init__(self.headers, self.proxies, self.auth)
 
                         # get a new download URL to retry
                         _url = url
@@ -374,8 +371,7 @@ class Downloader:
                 print("Download Failed!")
 
         # Initialize the downloader with stop Event
-        self.__init__(self.Stop, self.headers, self.proxies, self.auth)
-        self.Stop.clear()
+        self.__init__(self.headers, self.proxies, self.auth)
         # Start the download process in a new thread
         th = threading.Thread(target=start_thread)
         th.start()

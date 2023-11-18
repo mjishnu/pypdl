@@ -14,13 +14,13 @@ pip install pypdl
 
 ### Basic Usage
 
-To download a file using the pypdl, simply create a new `Downloader` object and call its `start` method, passing in the URL of the file to be downloaded and the path where it should be saved:
+To download a file using the pypdl, simply create a new `Downloader` object and call its `start` method, passing in the URL of the file to be downloaded:
 
 ```python
 from pypdl import Downloader
 
 dl = Downloader()
-dl.start('http://example.com/file.txt', 'file.txt')
+dl.start('http://example.com/file.txt')
 ```
 
 ### Advanced Usage
@@ -91,17 +91,14 @@ if __name__ == '__main__':
 
 This example downloads a large file from the internet using 10 threads and displays the download progress. If the download fails, it will retry up to 3 times. we are aso using a custom header to set user-agent
 
-Another example of using a custom stop event and printing the progress to console:
+Another example of implementing pause resume functionality and printing the progress to console:
 
 ```python
 from pypdl import Downloader
 from threading import Event
 
-# create a custom stop event
-stop = Event()
-
 # create a downloader object
-dl = Downloader(stop)
+dl = Downloader()
 
 # start the download process
 # block=False so we can print the progress
@@ -113,7 +110,7 @@ while dl.progress != 70:
   print(dl.progress)
 
 # stop the download process
-stop.set() # can also be done by calling d.stop()
+d.stop() 
 
 #do something
 #...
@@ -127,7 +124,7 @@ while dl.progress != 100:
 
 ```
 
-This example we create a custom **stop event** and pass it to the **Downloader** object. We then start the download process and print the progress to console. We then stop the download process and do something else. After that we resume the download process and print the rest of the progress to console. This can be used to create a pause/resume functionality.
+This example we start the download process and print the progress to console. We then stop the download process and do something else. After that we resume the download process and print the rest of the progress to console. This can be used to create a pause/resume functionality.
 
 ## API Reference
 
@@ -137,7 +134,6 @@ The `Downloader` class represents a file downloader that can download a file fro
 
 #### Parameters
 
--   `StopEvent`: An optional parameter to set custom a stop event.
 -   `header`: An optional parameter to set custom header. (Note: Never use custom "range" header if using multithread = True)
 -   `proxies`: An optional parameter to set custom proxies.
 -   `auth`: An optional parameter to set authentication for proxies.
@@ -152,7 +148,6 @@ The `Downloader` class represents a file downloader that can download a file fro
 -   `doneMB`: The amount of data downloaded so far, in MB.
 -   `eta`: The estimated time remaining for download completion, in the format "HH:MM:SS".
 -   `remaining`: The amount of data remaining to be downloaded, in MB.
--   `Stop`: An event that can be used to stop the download process.
 -   `headers`: A dictionary containing user headers.
 -   `proxies`: A dictionary containing user proxies.
 -   `auth`: A tuple containing authentication for proxies.

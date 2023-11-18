@@ -10,11 +10,14 @@ from typing import Callable, Optional
 import requests
 from reprint import output
 
-from .utls import Multidown, Singledown, timestring
+# chagne!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+from utls import Multidown, Singledown, timestring
 
 
 class Downloader:
-    def __init__(self, StopEvent = threading.Event(), headers={}, proxies=None, auth=None):
+    def __init__(
+        self, StopEvent=threading.Event(), headers={}, proxies=None, auth=None
+    ):
         """
         Initializes the Downloader object.
 
@@ -29,8 +32,9 @@ class Downloader:
         # keep track of recent download speed
         self._recent = deque([0] * 12, maxlen=12)
         self._dic = {}  # dictionary to keep track of download progress
-        self._workers = []  # list of download worker threads
+        self._workers = []  # list of multidownload object objects
         self._Error = threading.Event()  # event to signal any download errors
+        self._threads = []  # list of all worker threads
 
         # public attributes
         self.totalMB = 0  # total download size in MB
@@ -41,13 +45,20 @@ class Downloader:
         self.doneMB = 0  # amount of data downloaded in MB
         self.eta = "99:59:59"  # estimated time remaining for download completion
         self.remaining = 0  # amount of data remaining to be downloaded
-        self.Stop = StopEvent # event to stop the download
-        self.headers = headers # headers to be used in the download request
-        self.proxies = proxies # proxies to be used in the download request
-        self.auth = auth # proxy auth to be used in the download request
+        self.Stop = StopEvent  # event to stop the download
+        self.headers = headers  # headers to be used in the download request
+        self.proxies = proxies  # proxies to be used in the download request
+        self.auth = auth  # proxy auth to be used in the download request
         self.Failed = False  # flag to indicate if download failure
 
-    def _download(self, url: str, filepath: str, num_connections: int, display: bool, multithread: bool):
+    def _download(
+        self,
+        url: str,
+        filepath: str,
+        num_connections: int,
+        display: bool,
+        multithread: bool,
+    ):
         """
         Internal download function.
 
@@ -77,7 +88,15 @@ class Downloader:
         # if no range available in header or no size from header, use single thread
         if not total or not head.headers.get("accept-ranges") or not multithread:
             # create single-threaded download object
-            sd = Singledown(url, f_path, self.Stop, self._Error, self.headers, self.proxies, self.auth)
+            sd = Singledown(
+                url,
+                f_path,
+                self.Stop,
+                self._Error,
+                self.headers,
+                self.proxies,
+                self.auth,
+            )
             # create single download worker thread
             th = threading.Thread(target=sd.worker)
             self._workers.append(sd)
@@ -93,7 +112,8 @@ class Downloader:
                     progress = json.loads(
                         json_file.read_text(),
                         object_hook=lambda d: {
-                            int(k) if k.isdigit() else k: v for k, v in d.items()},
+                            int(k) if k.isdigit() else k: v for k, v in d.items()
+                        },
                     )
                 except:
                     pass
@@ -127,12 +147,20 @@ class Downloader:
                     "completed": False,
                 }
                 # create multidownload object for each connection
-                md = Multidown(self._dic, i, self.Stop,
-                            self._Error, self.headers, self.proxies, self.auth)
+                md = Multidown(
+                    self._dic,
+                    i,
+                    self.Stop,
+                    self._Error,
+                    self.headers,
+                    self.proxies,
+                    self.auth,
+                )
                 # create worker thread for each connection
                 th = threading.Thread(target=md.worker)
                 threads.append(th)
                 th.start()
+                self._threads.append(th)
                 self._workers.append(md)
 
             # save the progress to the progress file
@@ -166,7 +194,7 @@ class Downloader:
                 if not recent_speed:
                     self.speed = 0
                 else:
-                    recent = list(self._recent)[12 - recent_speed:]
+                    recent = list(self._recent)[12 - recent_speed :]
                     if len(recent) == 1:
                         self.speed = recent[0] / 1048576 / interval
                     else:
@@ -191,10 +219,14 @@ class Downloader:
                             )
                             + "%"
                         )
-                        dynamic_print[1] = f"Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
+                        dynamic_print[
+                            1
+                        ] = f"Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
                     else:
                         dynamic_print[0] = "Downloading..."
-                        dynamic_print[1] = f"Downloaded: {self.doneMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s"
+                        dynamic_print[
+                            1
+                        ] = f"Downloaded: {self.doneMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s"
 
                 # check if download has been stopped or if an error has occurred
                 if self.Stop.is_set() or self._Error.is_set():
@@ -240,7 +272,11 @@ class Downloader:
         """
         Stop the download process.
         """
+        time.sleep(2)
         self.Stop.set()
+        # waiting for all threads to be killed by the poison pill
+        for thread in self._threads:
+            thread.join()
 
     def start(
         self,
@@ -270,8 +306,7 @@ class Downloader:
         def start_thread():
             try:
                 # start the download, not using "try" since all expected errors and will trigger error event
-                self._download(url, filepath, num_connections,
-                            display, multithread)
+                self._download(url, filepath, num_connections, display, multithread)
                 # retry the download if there are errors
                 for _ in range(retries):
                     if self._Error.is_set():
@@ -286,13 +321,15 @@ class Downloader:
                                 _url = retry_func()
                             except Exception as e:
                                 print(
-                                    f"Retry function Error: ({e.__class__.__name__}, {e})")
+                                    f"Retry function Error: ({e.__class__.__name__}, {e})"
+                                )
 
                         if display:
                             print("retrying...")
                         # restart the download
-                        self._download(_url, filepath, num_connections,
-                                    display, multithread)
+                        self._download(
+                            _url, filepath, num_connections, display, multithread
+                        )
                     else:
                         break
             # if there's an error, set the error event and print the error message
@@ -312,6 +349,6 @@ class Downloader:
         th = threading.Thread(target=start_thread)
         th.start()
 
-        # Block the current thread until the download is complete, if necessary
+        # Block the current thread until the download is complete
         if block:
             th.join()

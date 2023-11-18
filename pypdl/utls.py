@@ -28,8 +28,16 @@ class Multidown:
     Class for downloading a specific part of a file in multiple chunks.
     """
 
-    def __init__(self, dic: Dict, id: int,
-                 stop: threading.Event, error: threading.Event, headers: Dict[str, str], proxies: Dict[str, str], auth: Tuple[str, str]):
+    def __init__(
+        self,
+        dic: Dict,
+        id: int,
+        stop: threading.Event,
+        error: threading.Event,
+        headers: Dict[str, str],
+        proxies: Dict[str, str],
+        auth: Tuple[str, str],
+    ):
         """
         Initializes the Multidown object.
 
@@ -104,7 +112,14 @@ class Multidown:
             try:
                 # download part
                 with requests.session() as s, open(path, "ab+") as f:
-                    with s.get(url, headers=headers, proxies=self.proxies, auth=self.auth, stream=True, timeout=20) as r:
+                    with s.get(
+                        url,
+                        headers=headers,
+                        proxies=self.proxies,
+                        auth=self.auth,
+                        stream=True,
+                        timeout=20,
+                    ) as r:
                         for chunk in r.iter_content(1048576):  # 1MB
                             if chunk:
                                 f.write(chunk)
@@ -115,8 +130,7 @@ class Multidown:
             except Exception as e:
                 self.error.set()
                 time.sleep(1)
-                print(
-                    f"Error in thread {self.id}: ({e.__class__.__name__}, {e})")
+                print(f"Error in thread {self.id}: ({e.__class__.__name__}, {e})")
 
         if self.curr == self.getval("size"):
             self.completed = 1
@@ -128,7 +142,16 @@ class Singledown:
     Class for downloading a whole file in a single chunk.
     """
 
-    def __init__(self, url: str, path: str, stop: threading.Event, error: threading.Event, headers: Dict[str, str], proxies: Dict[str, str], auth: Tuple[str, str]):
+    def __init__(
+        self,
+        url: str,
+        path: str,
+        stop: threading.Event,
+        error: threading.Event,
+        headers: Dict[str, str],
+        proxies: Dict[str, str],
+        auth: Tuple[str, str],
+    ):
         """
         Initializes the Singledown object.
 
@@ -157,7 +180,12 @@ class Singledown:
         try:
             # download part
             with requests.get(
-                self.url, stream=True, timeout=20, headers=self.headers, proxies=self.proxies, auth=self.auth
+                self.url,
+                stream=True,
+                timeout=20,
+                headers=self.headers,
+                proxies=self.proxies,
+                auth=self.auth,
             ) as r, open(self.path, "wb") as file:
                 for chunk in r.iter_content(1048576):  # 1MB
                     if chunk:

@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import threading
 import time
 from collections import deque
@@ -10,7 +12,7 @@ from typing import Callable, Optional
 import requests
 from reprint import output
 
-from .utls import Multidown, Singledown, timestring
+from .utls import Multidown, Singledown, timestring, get_filename_from_headers
 
 
 class Downloader:
@@ -64,16 +66,36 @@ class Downloader:
         Parameters:
             url (str): The URL of the file to download.
             filepath (str): The file path to save the download.
+                If it is directory or None then filepath is appended with file name.
             num_connections (int): The number of connections to use for a multi-threaded download.
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.
         """
+        # get the header information for the file
+        head = requests.head(url, timeout=20,
+                             allow_redirects=True,
+                             headers=self.headers,
+                             proxies=self.proxies,
+                             auth=self.auth)
+        # get file name from headers
+        filename = get_filename_from_headers(head.headers)
+        # if file name couldn't be retrieved from headers, generate temporary file
+        if filename is None:
+            # trick to generate temporary filename without creating a handle to it
+            # https://stackoverflow.com/a/45803022
+            with tempfile.TemporaryFile() as tmp:
+                filename = tmp.name
+        # if filepath not specified, try to get file name from headers
+        if filepath is None:
+            filepath = filename
+        # if filepath is a directory, try to get file name
+        elif os.path.isdir(filepath):
+            filepath = os.path.join(filepath, filename)
+
         # progress file to keep track of download progress
         json_file = Path(filepath + ".progress.json")
         threads = []
         f_path = str(filepath)
-        # get the header information for the file
-        head = requests.head(url, timeout=20, allow_redirects=True)
         # get the total size of the file from the header
         total = int(head.headers.get("content-length"))
         self.totalMB = total / 1048576  # 1MB = 1048576 bytes (size in MB)
@@ -280,7 +302,7 @@ class Downloader:
     def start(
         self,
         url: str,
-        filepath: str,
+        filepath: Optional[str] = None,
         num_connections: int = 10,
         display: bool = True,
         multithread: bool = True,
@@ -293,7 +315,8 @@ class Downloader:
 
         Parameters:
             url (str): The download URL.
-            filepath (str): The file path to save the download.
+            filepath (str): The optional file path to save the download.
+                If it is directory or None then filepath is appended with file name.
             num_connections (int): The number of connections to use for a multi-threaded download.
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.

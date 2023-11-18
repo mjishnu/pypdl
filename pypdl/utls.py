@@ -20,6 +20,7 @@ def get_filename_from_headers(headers: CaseInsensitiveDict[str]):
         Desired file name
     """
     content_disposition = headers.get("Content-Disposition")
+    print(content_disposition)
 
     if content_disposition and "filename=" in content_disposition:
         filename_start = content_disposition.index("filename=") + len("filename=")

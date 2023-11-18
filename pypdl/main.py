@@ -1,6 +1,5 @@
 import json
 import os
-import tempfile
 import threading
 import time
 from collections import deque
@@ -11,8 +10,13 @@ from typing import Callable, Optional
 
 import requests
 from reprint import output
-
-from .utls import Multidown, Singledown, timestring, get_filename_from_headers,get_filename_from_url
+from .utls import (
+    Multidown,
+    Singledown,
+    get_filename_from_headers,
+    get_filename_from_url,
+    timestring,
+)
 
 
 class Downloader:
@@ -72,19 +76,28 @@ class Downloader:
             multithread (bool): Whether to use multi-threaded download.
         """
         # get the header information for the file
-        head = requests.head(url, timeout=20,
-                            allow_redirects=True,
-                            headers=self.headers,
-                            proxies=self.proxies,
-                            auth=self.auth)
+        head = requests.head(
+            url,
+            timeout=20,
+            allow_redirects=True,
+            headers=self.headers,
+            proxies=self.proxies,
+            auth=self.auth,
+        )
+
+        # get file name from headers
+        filename = get_filename_from_headers(head.headers)
+
+        # if file name couldn't be retrieved from headers, generate from url
+        if filename is None:
+            filename = get_filename_from_url(url)
+
+        # if filepath not specified, set filename as filepath
+        if filepath is None:
+            filepath = filename
+
         # if filepath is a directory, try to get file name
-        if os.path.isdir(filepath):
-            # get file name from headers
-            filename = get_filename_from_headers(head.headers)
-            # if file name couldn't be retrieved from headers, generate temporary file
-            if filename is None:
-                # generate file name from url
-                get_filename_from_url(url)
+        elif os.path.isdir(filepath):
             filepath = os.path.join(filepath, filename)
 
         # progress file to keep track of download progress
@@ -351,6 +364,7 @@ class Downloader:
                         break
             # if there's an error, set the error event and print the error message
             except Exception as e:
+                raise Exception(e)
                 print(f"Download Error: ({e.__class__.__name__}, {e})")
                 self._Error.set()
 

@@ -271,7 +271,7 @@ class Downloader:
         """
         Stop the download process.
         """
-        time.sleep(2)
+        time.sleep(3)
         self.Stop.set()
         # waiting for all threads to be killed by the poison pill
         for thread in self._threads:

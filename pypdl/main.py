@@ -12,7 +12,7 @@ from typing import Callable, Optional
 import requests
 from reprint import output
 
-from .utls import Multidown, Singledown, timestring, get_filename_from_headers
+from .utls import Multidown, Singledown, timestring, get_filename_from_headers,get_filename_from_url
 
 
 class Downloader:
@@ -73,23 +73,18 @@ class Downloader:
         """
         # get the header information for the file
         head = requests.head(url, timeout=20,
-                             allow_redirects=True,
-                             headers=self.headers,
-                             proxies=self.proxies,
-                             auth=self.auth)
-        # get file name from headers
-        filename = get_filename_from_headers(head.headers)
-        # if file name couldn't be retrieved from headers, generate temporary file
-        if filename is None:
-            # trick to generate temporary filename without creating a handle to it
-            # https://stackoverflow.com/a/45803022
-            with tempfile.TemporaryFile() as tmp:
-                filename = tmp.name
-        # if filepath not specified, try to get file name from headers
-        if filepath is None:
-            filepath = filename
+                            allow_redirects=True,
+                            headers=self.headers,
+                            proxies=self.proxies,
+                            auth=self.auth)
         # if filepath is a directory, try to get file name
-        elif os.path.isdir(filepath):
+        if os.path.isdir(filepath):
+            # get file name from headers
+            filename = get_filename_from_headers(head.headers)
+            # if file name couldn't be retrieved from headers, generate temporary file
+            if filename is None:
+                # generate file name from url
+                get_filename_from_url(url)
             filepath = os.path.join(filepath, filename)
 
         # progress file to keep track of download progress

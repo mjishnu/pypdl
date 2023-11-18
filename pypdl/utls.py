@@ -3,7 +3,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 import requests
 from requests.structures import CaseInsensitiveDict
@@ -19,10 +19,10 @@ def get_filename_from_headers(headers: CaseInsensitiveDict[str]):
     Returns:
         Desired file name
     """
-    content_disposition = headers.get('Content-Disposition')
+    content_disposition = headers.get("Content-Disposition")
 
-    if content_disposition and 'filename=' in content_disposition:
-        filename_start = content_disposition.index('filename=') + len('filename=')
+    if content_disposition and "filename=" in content_disposition:
+        filename_start = content_disposition.index("filename=") + len("filename=")
         filename = content_disposition[filename_start:]
         # Remove quotes and any leading or trailing spaces
         filename = filename.strip(' "')
@@ -30,6 +30,20 @@ def get_filename_from_headers(headers: CaseInsensitiveDict[str]):
         filename = unquote(filename)
         return filename
     return None
+
+
+def get_filename_from_url(url: str):
+    """
+    Extracts desired file name from given URL
+
+    Parameters:
+        url (str): URL of the file
+
+    Returns:
+        Desired file name
+    """
+    filename = unquote(urlparse(url).path.split("/")[-1])
+    return filename
 
 
 def timestring(sec: int) -> str:

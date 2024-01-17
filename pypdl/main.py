@@ -10,7 +10,7 @@ from typing import Callable, Optional
 
 import requests
 from reprint import output
-from .utls import (
+from utls import (
     Multidown,
     Singledown,
     get_filename_from_headers,
@@ -20,7 +20,7 @@ from .utls import (
 
 
 class Downloader:
-    def __init__(self, headers={}, proxies=None, auth=None):
+    def __init__(self, **kwargs):
         """
         Initializes the Downloader object.
 
@@ -38,6 +38,7 @@ class Downloader:
         self._Error = threading.Event()  # event to signal any download errors
         self._threads = []  # list of all worker threads
         self._stop = threading.Event()  # event to stop the download
+        self._kwargs = kwargs  # keyword arguments
 
         # public attributes
         self.totalMB = 0  # total download size in MB
@@ -48,9 +49,6 @@ class Downloader:
         self.doneMB = 0  # amount of data downloaded in MB
         self.eta = "99:59:59"  # estimated time remaining for download completion
         self.remaining = 0  # amount of data remaining to be downloaded
-        self.headers = headers  # headers to be used in the download request
-        self.proxies = proxies  # proxies to be used in the download request
-        self.auth = auth  # proxy auth to be used in the download request
         self.Failed = False  # flag to indicate if download failure
 
     def _download(
@@ -73,14 +71,7 @@ class Downloader:
             multithread (bool): Whether to use multi-threaded download.
         """
         # get the header information for the file
-        head = requests.head(
-            url,
-            timeout=20,
-            allow_redirects=True,
-            headers=self.headers,
-            proxies=self.proxies,
-            auth=self.auth,
-        )
+        head = requests.head(url, timeout=20, allow_redirects=True, **self._kwargs)
 
         # get file name from headers
         filename = get_filename_from_headers(head.headers)
@@ -114,15 +105,7 @@ class Downloader:
         # if no range available in header or no size from header, use single thread
         if not total or not head.headers.get("accept-ranges") or not multithread:
             # create single-threaded download object
-            sd = Singledown(
-                url,
-                f_path,
-                self._stop,
-                self._Error,
-                self.headers,
-                self.proxies,
-                self.auth,
-            )
+            sd = Singledown(url, f_path, self._stop, self._Error, **self._kwargs)
             # create single download worker thread
             th = threading.Thread(target=sd.worker)
             self._workers.append(sd)
@@ -173,15 +156,7 @@ class Downloader:
                     "completed": False,
                 }
                 # create multidownload object for each connection
-                md = Multidown(
-                    self._dic,
-                    i,
-                    self._stop,
-                    self._Error,
-                    self.headers,
-                    self.proxies,
-                    self.auth,
-                )
+                md = Multidown(self._dic, i, self._stop, self._Error, **self._kwargs)
                 # create worker thread for each connection
                 th = threading.Thread(target=md.worker)
                 threads.append(th)
@@ -339,7 +314,7 @@ class Downloader:
                     if self._Error.is_set():
                         time.sleep(3)
                         # reset the downloader object
-                        self.__init__(self.headers, self.proxies, self.auth)
+                        self.__init__(**self._kwargs)
 
                         # get a new download URL to retry
                         _url = url
@@ -371,7 +346,7 @@ class Downloader:
                 print("Download Failed!")
 
         # Initialize the downloader with stop Event
-        self.__init__(self.headers, self.proxies, self.auth)
+        self.__init__(**self._kwargs)
         # Start the download process in a new thread
         th = threading.Thread(target=start_thread)
         th.start()

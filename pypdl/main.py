@@ -124,12 +124,15 @@ class Downloader:
                             int(k) if k.isdigit() else k: v for k, v in d.items()
                         },
                     )
+                    if progress["url"] == url:
+                        num_connections = progress["connections"]
+
                 except:
                     pass
             segment = total / num_connections
+            self._dic["url"] = url
             self._dic["total"] = total
             self._dic["connections"] = num_connections
-            self._dic["url"] = url
             for i in range(num_connections):
                 try:
                     # try to use progress file to resume download
@@ -145,9 +148,9 @@ class Downloader:
                     size = end - start + (i != num_connections - 1)
 
                 self._dic[i] = {
+                    "path": f"{filepath}.{i}.part",
                     "start": start,
                     "end": end,
-                    "path": f"{filepath}.{i}.part",
                     "size": size,
                 }
                 # create multidownload object for each connection

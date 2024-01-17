@@ -1,7 +1,7 @@
+import copy
 import os
 import threading
 import time
-import copy
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import unquote, urlparse
@@ -16,8 +16,9 @@ def get_filename_from_headers(headers: Dict) -> str:
         filename_start = content_disposition.index("filename=") + len("filename=")
         filename = content_disposition[filename_start:]
         filename = filename.strip(' "')
-        filename = unquote(filename)  # Decode URL encoding
+        filename = unquote(filename)  # Decode URL encodings
         return filename
+
     return None
 
 
@@ -30,7 +31,6 @@ def timestring(sec: int) -> str:
     """
     Converts seconds to a string formatted as HH:MM:SS.
     """
-
     sec = int(sec)
     m, s = divmod(sec, 60)
     h, m = divmod(m, 60)
@@ -50,74 +50,56 @@ class Multidown:
         error: threading.Event,
         **kwargs,
     ):
-        self.curr = 0  # current size of downloaded part
+        self.curr = 0  # Downloaded size in bytes
         self.completed = 0
         self.id = id
-        self.dic = dic  # {start, curr, end, filepath, size, url, completed}
+        self.dic = dic
+        self.url = dic["url"]
         self.stop = stop
         self.error = error
         self.kwargs = kwargs  # Request Module kwargs
 
     def getval(self, key: str) -> Any:
-        return self.dic[self.id][key]
+        return self.dic[self.id][key]  # {start, end, path, size}
 
-    def setval(self, key: str, val: Any):
+    def setval(self, key: str, val: Any) -> None:
         self.dic[self.id][key] = val
 
-    def worker(self):
+    def worker(self) -> None:
         """
         Download a part of the file in multiple chunks.
         """
-
-        filepath = self.getval("filepath")
-        path = Path(filepath)
+        start = self.getval("start")
         end = self.getval("end")
+        path = Path(self.getval("path"))
+        size = self.getval("size")
 
-        # checks if the part exists, if it doesn't exist set start from the beginning, else download the rest of the file
-        if not path.exists():
-            start = self.getval("start")
-        else:
-            # gets the size of the file
+        if path.exists():
             self.curr = path.stat().st_size
-            # add the old start size and the current size to get the new start size
-            start = self.getval("start") + self.curr
-            # corruption check to make sure parts are not corrupted
-            if start > end:
+            start = start + self.curr
+            if self.curr > size:
                 os.remove(path)
                 self.error.set()
                 print("corrupted file!")
 
-        url = self.getval("url")
-        # not updating self.kwargs because it will reference the orginal headers dict and will cause wrong range
-        kwargs = copy.deepcopy(self.kwargs)
-        range_header = {"range": f"bytes={start}-{end}"}
-        kwargs.setdefault("headers", {}).update(range_header)
-
-        if self.curr != self.getval("size"):
+        kwargs = copy.deepcopy(self.kwargs)  # since it will be used by other threads
+        kwargs.setdefault("headers", {}).update({"range": f"bytes={start}-{end}"})
+        if self.curr != size:
             try:
-                # download part
-                with requests.session() as s, open(path, "ab+") as f:
-                    with s.get(
-                        url,
-                        stream=True,
-                        timeout=20,
-                        **kwargs,
-                    ) as r:
-                        for chunk in r.iter_content(1048576):  # 1MB
+                with open(path, "ab+") as f:
+                    with requests.get(self.url, stream=True, timeout=20, **kwargs) as r:
+                        for chunk in r.iter_content(1048576):  # chunk size = 1MB
                             if chunk:
                                 f.write(chunk)
                                 self.curr += len(chunk)
-                                self.setval("curr", self.curr)
                             if not chunk or self.stop.is_set() or self.error.is_set():
                                 break
             except Exception as e:
                 self.error.set()
                 time.sleep(1)
                 print(f"Error in thread {self.id}: ({e.__class__.__name__}, {e})")
-
-        if self.curr == self.getval("size"):
+        if self.curr == size:
             self.completed = 1
-            self.setval("completed", 1)
 
 
 class Singledown:
@@ -133,34 +115,31 @@ class Singledown:
         error: threading.Event,
         **kwargs,
     ):
-        self.curr = 0  # current size of downloaded file
-        self.completed = 0  # whether the download is complete
-        self.url = url  # url of the file
-        self.path = path  # path to save the file
-        self.stop = stop  # event to stop the download
-        self.error = error  # event to indicate an error occurred
-        self.kwargs = kwargs  # user kwargs
+        self.curr = 0  # Downloaded size in bytes
+        self.completed = 0
+        self.url = url
+        self.path = path
+        self.stop = stop
+        self.error = error
+        self.kwargs = kwargs  # Request Module kwargs
 
-    def worker(self):
+    def worker(self) -> None:
         """
-        Download a whole file in a single chunk.
+        Download a whole file in a single part.
         """
-        flag = True
         try:
-            # download part
-            with requests.get(
-                self.url, stream=True, timeout=20, **self.kwargs
-            ) as r, open(self.path, "wb") as file:
-                for chunk in r.iter_content(1048576):  # 1MB
-                    if chunk:
-                        file.write(chunk)
-                        self.curr += len(chunk)
-                    if not chunk or self.stop.is_set() or self.error.is_set():
-                        flag = False
-                        break
+            with open(self.path, "ab+") as f:
+                with requests.get(
+                    self.url, stream=True, timeout=20, **self.kwargs
+                ) as r:
+                    for chunk in r.iter_content(1048576):  # chunk size = 1MB
+                        if chunk:
+                            f.write(chunk)
+                            self.curr += len(chunk)
+                        if not chunk or self.stop.is_set() or self.error.is_set():
+                            break
         except Exception as e:
             self.error.set()
             time.sleep(1)
             print(f"Error in download thread: ({e.__class__.__name__}: {e})")
-        if flag:
-            self.completed = 1
+        self.completed = 1

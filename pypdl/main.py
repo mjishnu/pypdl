@@ -129,13 +129,12 @@ class Downloader:
             segment = total / num_connections
             self._dic["total"] = total
             self._dic["connections"] = num_connections
-            self._dic["paused"] = False
+            self._dic["url"] = url
             for i in range(num_connections):
                 try:
                     # try to use progress file to resume download
                     start = progress[i]["start"]
                     end = progress[i]["end"]
-                    curr = progress[i]["curr"]
                     size = progress[i]["size"]
                 except:
                     # if not able to use progress file, then calculate the start, end, curr, and size
@@ -143,17 +142,13 @@ class Downloader:
                     start = int(segment * i)
                     # here end is the ((segment * next part) - 1 byte) since the last byte is downloaded by next part except for the last part
                     end = int(segment * (i + 1)) - (i != num_connections - 1)
-                    curr = start
                     size = end - start + (i != num_connections - 1)
 
                 self._dic[i] = {
                     "start": start,
-                    "curr": curr,
                     "end": end,
-                    "filepath": f"{filepath}.{i}.part",
+                    "path": f"{filepath}.{i}.part",
                     "size": size,
-                    "url": url,
-                    "completed": False,
                 }
                 # create multidownload object for each connection
                 md = Multidown(self._dic, i, self._stop, self._Error, **self._kwargs)
@@ -231,7 +226,6 @@ class Downloader:
 
                 # check if download has been stopped or if an error has occurred
                 if self._stop.is_set() or self._Error.is_set():
-                    self._dic["paused"] = True
                     if not singlethread:
                         # save progress to progress file
                         json_file.write_text(json.dumps(self._dic, indent=4))

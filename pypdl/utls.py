@@ -8,23 +8,19 @@ from urllib.parse import unquote, urlparse
 
 import requests
 
+MEGABYTE = 1048576
 
-def get_filename_from_headers(headers: Dict) -> str:
+
+def get_filename(url: str, headers: Dict) -> str:
     content_disposition = headers.get("Content-Disposition")
 
     if content_disposition is not None and "filename=" in content_disposition:
         filename_start = content_disposition.index("filename=") + len("filename=")
-        filename = content_disposition[filename_start:]
+        filename = content_disposition[filename_start:]  # Get name from headers
         filename = filename.strip(' "')
-        filename = unquote(filename)  # Decode URL encodings
-        return filename
-
-    return None
-
-
-def get_filename_from_url(url: str) -> str:
-    filename = unquote(urlparse(url).path.split("/")[-1])
-    return filename
+        return unquote(filename)  # Decode URL encodings
+    else:
+        return unquote(urlparse(url).path.split("/")[-1])  # Generate name from url
 
 
 def timestring(sec: int) -> str:
@@ -35,6 +31,10 @@ def timestring(sec: int) -> str:
     m, s = divmod(sec, 60)
     h, m = divmod(m, 60)
     return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def to_mb(size_in_bytes: int) -> float:
+    return size_in_bytes / MEGABYTE
 
 
 class Basicdown:
@@ -56,7 +56,7 @@ class Basicdown:
         try:
             with open(path, mode) as f:
                 with requests.get(url, stream=True, timeout=20, **kwargs) as r:
-                    for chunk in r.iter_content(1048576):  # chunk size = 1MB
+                    for chunk in r.iter_content(MEGABYTE):
                         if chunk:
                             f.write(chunk)
                             self.curr += len(chunk)
@@ -70,7 +70,7 @@ class Basicdown:
 
 class Singledown(Basicdown):
     """
-    Class for downloading a whole file.
+    Class for downloading the whole file in a single part.
     """
 
     def __init__(
@@ -87,16 +87,13 @@ class Singledown(Basicdown):
         self.kwargs = kwargs
 
     def worker(self) -> None:
-        """
-        Download a whole file in a single part.
-        """
         self.download(self.url, self.path, mode="wb", **self.kwargs)
         self.completed = 1
 
 
 class Multidown(Basicdown):
     """
-    Class for downloading a specific part of a file.
+    Class for downloading a specific part of the file.
     """
 
     def __init__(
@@ -113,14 +110,11 @@ class Multidown(Basicdown):
         self.kwargs = kwargs
 
     def worker(self) -> None:
-        """
-        Download a part of the file in multiple chunks.
-        """
         url = self.dic["url"]
         path = Path(self.dic[self.id]["path"])
         start = self.dic[self.id]["start"]
         end = self.dic[self.id]["end"]
-        size = self.dic[self.id]["size"]
+        size = self.dic[self.id]["segment_size"]
 
         if path.exists():
             self.curr = path.stat().st_size

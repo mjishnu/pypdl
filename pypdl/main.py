@@ -10,13 +10,7 @@ from typing import Callable, Optional
 
 import requests
 from reprint import output
-from utls import (
-    Multidown,
-    Singledown,
-    get_filename_from_headers,
-    get_filename_from_url,
-    timestring,
-)
+from utls import Multidown, Singledown, get_filename, timestring, to_mb
 
 
 class Downloader:
@@ -41,14 +35,14 @@ class Downloader:
         self._kwargs = kwargs  # keyword arguments
 
         # public attributes
-        self.totalMB = 0  # total download size in MB
+        self.size = 0  # download size in bytes
         self.progress = 0  # download progress percentage
         self.speed = 0  # download speed in MB/s
         self.download_mode = ""  # download mode: single-threaded or multi-threaded
         self.time_spent: Optional[float] = None  # time spent downloading
-        self.doneMB = 0  # amount of data downloaded in MB
+        self.downloaded = 0  # amount of data self.downloaded in MB
         self.eta = "99:59:59"  # estimated time remaining for download completion
-        self.remaining = 0  # amount of data remaining to be downloaded
+        self.remaining = 0  # amount of data remaining to be self.downloaded
         self.Failed = False  # flag to indicate if download failure
 
     def _download(
@@ -70,121 +64,102 @@ class Downloader:
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.
         """
-        # get the header information for the file
-        head = requests.head(url, timeout=20, allow_redirects=True, **self._kwargs)
+        header = requests.head(url, timeout=20, allow_redirects=True, **self._kwargs)
 
-        # get file name from headers
-        filename = get_filename_from_headers(head.headers)
-
-        # if file name couldn't be retrieved from headers, generate from url
-        if filename is None:
-            filename = get_filename_from_url(url)
-
-        # if filepath not specified, set filename as filepath
+        filename = get_filename(url, header.headers)
         if filepath is None:
             filepath = filename
 
-        # if filepath is a directory, try to get file name
-        elif os.path.isdir(filepath):
+        elif os.path.isdir(filepath) is True:
             filepath = os.path.join(filepath, filename)
 
-        # progress file to keep track of download progress
-        json_file = Path(filepath + ".progress.json")
-        threads = []
-        f_path = str(filepath)
-        # get the total size of the file from the header
-        total = int(head.headers.get("content-length"))
-        self.totalMB = total / 1048576  # 1MB = 1048576 bytes (size in MB)
-        started = datetime.now()
-        singlethread = False
+        self.size = int(header.headers.get("content-length"))
+        if self.size == 0:
+            self.size = inf
+            multithread = False
 
-        # adjust the number of connections for small files
-        if self.totalMB < 50:
+        started = datetime.now()
+
+        if to_mb(self.size) < 50:
             num_connections = 5 if num_connections > 5 else num_connections
 
-        # if no range available in header or no size from header, use single thread
-        if not total or not head.headers.get("accept-ranges") or not multithread:
-            # create single-threaded download object
-            sd = Singledown(url, f_path, self._stop, self._Error, **self._kwargs)
-            # create single download worker thread
+        if not multithread or header.headers.get("accept-ranges") is None:
+            sd = Singledown(url, filepath, self._stop, self._Error, **self._kwargs)
             th = threading.Thread(target=sd.worker)
             self._workers.append(sd)
             th.start()
-            total = inf if not total else total
-            singlethread = True
+            # completed till here
         else:
-            # multiple threads possible
-            if json_file.exists():
+            progress_file = Path(filepath + ".json")
+            if progress_file.exists():
                 # load the progress from the progress file
                 # the object_hook converts the key strings whose value is int to type int
                 try:
                     progress = json.loads(
-                        json_file.read_text(),
+                        progress_file.read_text(),
                         object_hook=lambda d: {
                             int(k) if k.isdigit() else k: v for k, v in d.items()
                         },
                     )
-                    if progress["url"] == url:
-                        num_connections = progress["connections"]
+                    if progress["url"] == url and progress["total_size"] == self.size:
+                        num_connections = progress["threads"]
 
                 except:
                     pass
-            segment = total / num_connections
+            segment = self.size / num_connections
             self._dic["url"] = url
-            self._dic["total"] = total
-            self._dic["connections"] = num_connections
+            self._dic["total_size"] = self.size
+            self._dic["threads"] = num_connections
             for i in range(num_connections):
                 try:
                     # try to use progress file to resume download
                     start = progress[i]["start"]
                     end = progress[i]["end"]
-                    size = progress[i]["size"]
+                    segment_size = progress[i]["size"]
                 except:
-                    # if not able to use progress file, then calculate the start, end, curr, and size
+                    # if not able to use progress file, then calculate the start, end, curr, and self.size
                     # calculate the beginning byte offset by multiplying the segment by num_connections.
                     start = int(segment * i)
-                    # here end is the ((segment * next part) - 1 byte) since the last byte is downloaded by next part except for the last part
+                    # here end is the ((segment * next part) - 1 byte) since the last byte is self.downloaded by next part except for the last part
                     end = int(segment * (i + 1)) - (i != num_connections - 1)
-                    size = end - start + (i != num_connections - 1)
+                    segment_size = end - start + (i != num_connections - 1)
 
                 self._dic[i] = {
-                    "path": f"{filepath}.{i}.part",
                     "start": start,
                     "end": end,
-                    "size": size,
+                    "segment_size": segment_size,
+                    "path": f"{filepath}.{i}.part",
                 }
                 # create multidownload object for each connection
                 md = Multidown(self._dic, i, self._stop, self._Error, **self._kwargs)
                 # create worker thread for each connection
                 th = threading.Thread(target=md.worker)
-                threads.append(th)
                 th.start()
                 self._threads.append(th)
                 self._workers.append(md)
 
             # save the progress to the progress file
-            if not singlethread:
-                json_file.write_text(json.dumps(self._dic, indent=4))
+            if multithread:
+                progress_file.write_text(json.dumps(self._dic, indent=4))
 
-        downloaded = 0
+        self.downloaded = 0
         interval = 0.15
-        self.download_mode = "Multi-Threaded" if not singlethread else "Single-Threaded"
+        self.download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
         # use reprint library to print dynamic progress output
         with output(initial_len=5, interval=0) as dynamic_print:
             while True:
-                if not singlethread:
+                if multithread:
                     # save progress to progress file
-                    json_file.write_text(json.dumps(self._dic, indent=4))
+                    progress_file.write_text(json.dumps(self._dic, indent=4))
                 # check if all workers have completed
                 status = sum(i.completed for i in self._workers)
-                # get the total amount of data downloaded
-                downloaded = sum(i.curr for i in self._workers)
-                self.doneMB = downloaded / 1048576
+                # get the self.size amount of data self.downloaded
+                self.downloaded = sum(i.curr for i in self._workers)
                 # keep track of recent download speeds
-                self._recent.append(downloaded)
+                self._recent.append(self.downloaded)
                 try:
                     # calculate download progress percentage
-                    self.progress = int(100 * downloaded / total)
+                    self.progress = int(100 * self.downloaded / self.size)
                 except ZeroDivisionError:
                     self.progress = 0
 
@@ -201,15 +176,15 @@ class Downloader:
                         self.speed = sum(diff) / len(diff) / 1048576 / interval
 
                 # calculate estimated time remaining for download completion
-                self.remaining = self.totalMB - self.doneMB
-                if self.speed and total != inf:
+                self.remaining = to_mb(self.size - self.downloaded)
+                if self.speed and self.size != inf:
                     self.eta = timestring(self.remaining / self.speed)
                 else:
                     self.eta = "99:59:59"
 
                 # print dynamic progress output
                 if display:
-                    if not singlethread:
+                    if multithread:
                         dynamic_print[0] = (
                             "[{0}{1}] {2}".format(
                                 "\u2588" * self.progress,
@@ -220,28 +195,28 @@ class Downloader:
                         )
                         dynamic_print[
                             1
-                        ] = f"Total: {self.totalMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
+                        ] = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
                     else:
                         dynamic_print[0] = "Downloading..."
                         dynamic_print[
                             1
-                        ] = f"Downloaded: {self.doneMB:.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s"
+                        ] = f"Downloaded: {to_mb(self.downloaded):.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s"
 
                 # check if download has been stopped or if an error has occurred
                 if self._stop.is_set() or self._Error.is_set():
-                    if not singlethread:
+                    if multithread:
                         # save progress to progress file
-                        json_file.write_text(json.dumps(self._dic, indent=4))
+                        progress_file.write_text(json.dumps(self._dic, indent=4))
                     break
 
                 # check if all workers have completed
                 if status == len(self._workers):
-                    if not singlethread:
+                    if multithread:
                         # combine the parts together
                         BLOCKSIZE = 4096
                         BLOCKS = 1024
                         CHUNKSIZE = BLOCKSIZE * BLOCKS
-                        with open(f_path, "wb") as dest:
+                        with open(filepath, "wb") as dest:
                             for i in range(num_connections):
                                 file_ = f"{filepath}.{i}.part"
                                 with open(file_, "rb") as f:
@@ -253,7 +228,7 @@ class Downloader:
                                             break
                                 Path(file_).unlink()
                         # delete the progress file
-                        json_file.unlink()
+                        progress_file.unlink()
                     break
                 time.sleep(interval)
 
@@ -293,7 +268,7 @@ class Downloader:
         Parameters:
             url (str): The download URL.
             filepath (str): The optional file path to save the download. by default it uses the present working directory,
-                If filepath is a directory then the file is downloaded into it else the file is downloaded with the given name.
+                If filepath is a directory then the file is self.downloaded into it else the file is self.downloaded with the given name.
             num_connections (int): The number of connections to use for a multi-threaded download.
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.

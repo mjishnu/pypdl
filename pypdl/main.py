@@ -70,9 +70,13 @@ class Downloader:
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.
         """
-        header = requests.head(
-            url, timeout=20, allow_redirects=True, **self._kwargs
-        ).headers
+        head = requests.head(url, timeout=20, allow_redirects=True, **self._kwargs)
+        if head.status_code != 200:
+            self._Error.set()
+            print(f"Server Returned: {head.status_code}({head.reason}), Invalid URL")
+            return
+
+        header = head.headers
         filename = get_filename(url, header)
 
         if filepath is None:

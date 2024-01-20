@@ -1,5 +1,4 @@
 import copy
-import os
 import threading
 import time
 from pathlib import Path
@@ -117,18 +116,16 @@ class Multidown(Basicdown):
         size = self.dic[self.id]["segment_size"]
 
         if path.exists():
-            self.curr = path.stat().st_size
+            downloaded_size = path.stat().st_size
+            if downloaded_size > size:
+                path.unlink()
+            else:
+                self.curr = downloaded_size
+
+        if self.curr < size:
             start = start + self.curr
-
-        kwargs = copy.deepcopy(self.kwargs)  # since it will be used by other threads
-        kwargs.setdefault("headers", {}).update({"range": f"bytes={start}-{end}"})
-
-        if self.curr > size:
-            os.remove(path)
-            self.error.set()
-            print("corrupted file!")
-
-        elif self.curr < size:
+            kwargs = copy.deepcopy(self.kwargs)  # since used by others
+            kwargs.setdefault("headers", {}).update({"range": f"bytes={start}-{end}"})
             self.download(url, path, "ab", **kwargs)
 
         if self.curr == size:
@@ -138,13 +135,20 @@ class Multidown(Basicdown):
 def create_segement_table(url, filepath, segments, size, etag) -> Dict:
     segments = 5 if (segments > 5) and (to_mb(size) < 50) else segments
     progress_file = Path(filepath + ".json")
+
     try:
         progress = json.loads(progress_file.read_text())
         if etag and progress["url"] == url and progress["etag"] == etag:
             segments = progress["segments"]
-
-    except:
+    except Exception:
         print("corrupted progress file!")
+
+    progress_file.write_text(
+        json.dumps(
+            {"url": url, "etag": etag, "segments": segments},
+            indent=4,
+        )
+    )
 
     dic = {}
     dic["url"] = url
@@ -165,12 +169,6 @@ def create_segement_table(url, filepath, segments, size, etag) -> Dict:
             "path": f"{filepath}.{segment}.part",
         }
 
-    progress_file.write_text(
-        json.dumps(
-            {"url": url, "etag": etag, "segments": segments},
-            indent=4,
-        )
-    )
     return dic
 
 

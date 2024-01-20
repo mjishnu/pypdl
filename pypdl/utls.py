@@ -141,7 +141,7 @@ def create_segement_table(url, filepath, segments, size, etag) -> Dict:
         if etag and progress["url"] == url and progress["etag"] == etag:
             segments = progress["segments"]
     except Exception:
-        print("corrupted progress file!")
+        pass
 
     progress_file.write_text(
         json.dumps(
@@ -160,7 +160,7 @@ def create_segement_table(url, filepath, segments, size, etag) -> Dict:
         segment_size = end - start
         if segment != (segments - 1):
             end -= 1  # [0-100, 100-200] -> [0-99, 100-200]
-        # No segment_size+=1 for last setgment since final bit is end bit
+        # No segment_size+=1 for last setgment since final byte is end byte
 
         dic[segment] = {
             "start": start,

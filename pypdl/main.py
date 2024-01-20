@@ -1,10 +1,9 @@
 import os
 import threading
 import time
-from collections import deque
 from math import inf
 from typing import Callable, Optional
-
+from collections import deque
 import requests
 from reprint import output
 from utls import (
@@ -30,8 +29,7 @@ class Downloader:
 
         """
         # private attributes
-        # keep track of recent download speed
-        self._recent = deque([0] * 12, maxlen=12)
+        # keep track of non_zero_list download speed
         self._dic = {}  # dictionary to keep track of download progress
         self._workers = []  # list of multidownload object objects
         self._Error = threading.Event()  # event to signal any download errors
@@ -43,14 +41,61 @@ class Downloader:
         self.size = inf  # download size in bytes
         self.progress = 0  # download progress percentage
         self.speed = 0  # download speed in MB/s
-        self.download_mode = ""  # download mode: single-threaded or multi-threaded
         self.time_spent: Optional[float] = None  # time spent downloading
         self.downloaded = 0  # amount of data self.downloaded in MB
         self.eta = "99:59:59"  # estimated time remaining for download completion
         self.remaining = 0  # amount of data remaining to be self.downloaded
         self.Failed = False  # flag to indicate if download failure
+        self.completed = False  # flag to indicate if download is complete
 
-    def _download(
+    def _display(self):
+        interval = 0.2
+        download_mode = "Multi-Threaded" if self._dic else "Single-Threaded"
+        with output(initial_len=2, interval=interval) as dynamic_print:
+            while True:
+                if self.size != inf:
+                    with_size_0 = f"[{'\u2588' * self.progress}{'\u00b7' * (100 - self.progress)}] {self.progress}%"
+                    with_size_1 = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
+
+                    dynamic_print[0] = with_size_0
+                    dynamic_print[1] = with_size_1
+                else:
+                    no_size_1 = f"Downloaded: {to_mb(self.downloaded):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s"
+
+                    dynamic_print[0] = "Downloading..."
+                    dynamic_print[1] = no_size_1
+                if self._stop.is_set() or self._Error.is_set() or self.completed:
+                    break
+                time.sleep(interval)
+        print(f"Time elapsed: {timestring(self.time_spent)}")
+
+    def _calc_values(self, recent_queue, interval):
+        self.downloaded = sum(i.curr for i in self._workers)
+        self.progress = (
+            int(100 * self.downloaded / self.size) if self.size != inf else 0
+        )
+
+        # speed calculation
+        recent_queue.appendleft(self.downloaded)
+        non_zero_vals = len([i for i in recent_queue if i])
+        if non_zero_vals == 0:
+            self.speed = 0
+        else:
+            non_zero_list = list(recent_queue)[:non_zero_vals]
+            if len(non_zero_list) == 1:
+                self.speed = to_mb(non_zero_list[0]) / interval
+            else:
+                diff = [a - b for a, b in zip(non_zero_list, non_zero_list[1:])]
+                self.speed = to_mb(sum(diff) / len(diff)) / interval
+
+        self.remaining = to_mb(self.size - self.downloaded)
+        self.eta = (
+            timestring(self.remaining / self.speed)
+            if (self.size != inf and self.speed != 0)
+            else "99:59:59"
+        )
+
+    def _downloader(
         self,
         url: str,
         filepath: str,
@@ -61,19 +106,12 @@ class Downloader:
     ):
         """
         Internal download function.
-
-        Parameters:
-            url (str): The URL of the file to download.
-            filepath (str): The file path to save the download.
-                If it is directory or None then filepath is appended with file name.
-            segments (int): The number of connections to use for a multi-threaded download.
-            display (bool): Whether to display download progress.
-            multithread (bool): Whether to use multi-threaded download.
         """
+        start_time = time.time()
         head = requests.head(url, timeout=20, allow_redirects=True, **self._kwargs)
         if head.status_code != 200:
             self._Error.set()
-            print(f"Server Returned: {head.status_code}({head.reason}), Invalid URL")
+            print(f"Server Returned: {head.reason}({head.status_code}), Invalid URL")
             return
 
         header = head.headers
@@ -88,8 +126,6 @@ class Downloader:
         if size := int(header.get("content-length")):
             self.size = size
 
-        start_time = time.time()
-
         if self.size is inf or header.get("accept-ranges") is None:
             multithread = False
             sd = Simpledown(url, filepath, self._stop, self._Error, **self._kwargs)
@@ -103,87 +139,33 @@ class Downloader:
             self._dic = create_segement_table(url, filepath, segments, self.size, etag)
             segments = self._dic["segments"]
             for i in range(segments):
-                # create multidownload object for each connection
                 md = Multidown(self._dic, i, self._stop, self._Error, **self._kwargs)
-                # create worker thread for each connection
                 th = threading.Thread(target=md.worker)
                 th.start()
                 self._threads.append(th)
                 self._workers.append(md)
 
+        recent_queue = deque([0] * 12, maxlen=12)
         interval = 0.15
-        self.download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
-        # use reprint library to print dynamic progress output
-        with output(initial_len=5, interval=0) as dynamic_print:
-            while True:
-                # check if all workers have completed
-                status = sum(i.completed for i in self._workers)
-                # get the self.size amount of data self.downloaded
-                self.downloaded = sum(i.curr for i in self._workers)
-                # keep track of recent download speeds
-                try:
-                    # calculate download progress percentage
-                    self.progress = int(100 * self.downloaded / self.size)
-                except ZeroDivisionError:
-                    self.progress = 0
 
-                # calculate download speed
-                self._recent.append(self.downloaded)
-                recent_speed = len([i for i in self._recent if i])
-                if not recent_speed:
-                    self.speed = 0
-                else:
-                    recent = list(self._recent)[12 - recent_speed :]
-                    if len(recent) == 1:
-                        self.speed = recent[0] / 1048576 / interval
-                    else:
-                        diff = [b - a for a, b in zip(recent, recent[1:])]
-                        self.speed = sum(diff) / len(diff) / 1048576 / interval
-
-                # calculate estimated time remaining for download completion
-                self.remaining = to_mb(self.size - self.downloaded)
-                if self.speed and self.size != inf:
-                    self.eta = timestring(self.remaining / self.speed)
-                else:
-                    self.eta = "99:59:59"
-
-                # print dynamic progress output
-                if display:
-                    if multithread:
-                        dynamic_print[0] = (
-                            "[{0}{1}] {2}".format(
-                                "\u2588" * self.progress,
-                                "\u00b7" * (100 - self.progress),
-                                str(self.progress),
-                            )
-                            + "%"
-                        )
-                        dynamic_print[
-                            1
-                        ] = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
-                    else:
-                        dynamic_print[0] = "Downloading..."
-                        dynamic_print[
-                            1
-                        ] = f"Downloaded: {to_mb(self.downloaded):.2f} MB, Download Mode: {self.download_mode}, Speed: {self.speed:.2f} MB/s"
-
-                # check if download has been stopped or if an error has occurred
-                if self._stop.is_set() or self._Error.is_set():
-                    break
-
-                # check if all workers have completed
-                if status == len(self._workers):
-                    if multithread:
-                        combine_files(filepath, segments)
-                    break
-                time.sleep(interval)
-        self.time_spent = time.time() - start_time
-
-        # print download result
         if display:
-            if self._stop.is_set():
-                print("Task interrupted!")
-            print(f"Time elapsed: {timestring(self.time_spent)}")
+            display_thread = threading.Thread(target=self._display)
+            display_thread.start()
+
+        while True:
+            status = sum(i.completed for i in self._workers)
+            self._calc_values(recent_queue, interval)
+
+            if self._stop.is_set() or self._Error.is_set():
+                break
+
+            if status == len(self._workers):
+                if multithread:
+                    combine_files(filepath, segments)
+                self.completed = True
+                break
+            time.sleep(interval)
+        self.time_spent = time.time() - start_time
 
     def stop(self):
         """
@@ -213,7 +195,7 @@ class Downloader:
         Parameters:
             url (str): The download URL.
             filepath (str): The optional file path to save the download. by default it uses the present working directory,
-                If filepath is a directory then the file is self.downloaded into it else the file is self.downloaded with the given name.
+                If filepath is a directory then the file is downloaded into it else the file is downloaded with the given name.
             segments (int): The number of connections to use for a multi-threaded download.
             display (bool): Whether to display download progress.
             multithread (bool): Whether to use multi-threaded download.
@@ -222,52 +204,35 @@ class Downloader:
             retry_func (function): A function to call to get a new download URL in case of an error.
         """
 
-        def start_thread():
-            try:
-                # start the download, not using "try" since all expected errors and will trigger error event
-                self._download(url, filepath, segments, display, multithread, etag)
-                # retry the download if there are errors
-                for _ in range(retries):
-                    if self._Error.is_set():
-                        time.sleep(3)
-                        # reset the downloader object
+        def download():
+            for i in range(retries + 1):
+                try:
+                    _url = url
+                    if i > 0:
+                        if display:
+                            print(f"Retrying... ({i}/{retries})")
+                        _url = retry_func() if callable(retry_func) else url
                         self.__init__(**self._kwargs)
 
-                        # get a new download URL to retry
-                        _url = url
-                        if callable(retry_func):
-                            try:
-                                _url = retry_func()
-                            except Exception as e:
-                                print(
-                                    f"Retry function Error: ({e.__class__.__name__}, {e})"
-                                )
+                    self._downloader(
+                        _url, filepath, segments, display, multithread, etag
+                    )
 
-                        if display:
-                            print("retrying...")
-                        # restart the download
-                        self._download(
-                            _url, filepath, segments, display, multithread, etag
-                        )
-                    else:
+                    if not self._Error.is_set():
                         break
-            # if there's an error, set the error event and print the error message
-            except Exception as e:
-                raise Exception(e)
-                print(f"Download Error: ({e.__class__.__name__}, {e})")
-                self._Error.set()
 
-            # if error flag is set, set the failed flag to True
+                    time.sleep(3)
+
+                except Exception as e:
+                    print(f"Download Error: ({e.__class__.__name__}, {e})")
+                    self._Error.set()
+
+            # Set the Failed flag if there was an error
             if self._Error.is_set():
                 self.Failed = True
-                print("Download Failed!")
 
-        # Initialize the downloader with stop Event
-        self.__init__(**self._kwargs)
-        # Start the download process in a new thread
-        th = threading.Thread(target=start_thread)
-        th.start()
+        download_thread = threading.Thread(target=download)
+        download_thread.start()
 
-        # Block the current thread until the download is complete
         if block:
-            th.join()
+            download_thread.join()

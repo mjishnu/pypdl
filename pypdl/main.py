@@ -20,31 +20,43 @@ from utls import (
 
 
 class Downloader:
-    def __init__(self, **kwargs):
-        """
-        Initializes the Downloader object.
+    """
+    A multi-threaded file downloader that supports progress tracking, retries, pause/resume functionality etc.
 
-        Parameters:
-            kwargs: Keyword arguments to pass to the requests library.
-        """
+    Keyword Arguments:
+        params (dict, optional): A dictionary, list of tuples or bytes to send as a query string. Default is None.
+        allow_redirects (bool, optional): A Boolean to enable/disable redirection. Default is True.
+        auth (tuple, optional): A tuple to enable a certain HTTP authentication. Default is None.
+        cert (str or tuple, optional): A String or Tuple specifying a cert file or key. Default is None.
+        cookies (dict, optional): A dictionary of cookies to send to the specified url. Default is None.
+        headers (dict, optional): A dictionary of HTTP headers to send to the specified url. Default is None.
+        proxies (dict, optional): A dictionary of the protocol to the proxy url. Default is None.
+        timeout (number or tuple, optional): A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 20 seconds.
+        verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
+    """
+
+    def __init__(self, **kwargs):
         # private attributes
-        self._segement_table = {}  # dictionary to keep track of download progress
-        self._workers = []  # list of multidownload object objects
-        self._threads = []  # list of all worker threads
-        self._error = threading.Event()  # event to signal any download errors
-        self._stop = threading.Event()  # event to stop the download
-        self._kwargs = kwargs  # keyword arguments
+        self._segement_table = {}
+        self._workers = []
+        self._threads = []
+        self._error = threading.Event()
+        self._stop = threading.Event()
+        self._kwargs = kwargs or {
+            "timeout": 20,
+            "allow_redirects": True,
+        }  # kwargs that are passed to request module
 
         # public attributes
-        self.size = inf  # download size in bytes
-        self.progress = 0  # download progress percentage
-        self.speed = 0  # download speed in MB/s
-        self.time_spent = 0  # time spent downloading
-        self.downloaded = 0  # amount of data downloaded in MB
-        self.eta = "99:59:59"  # estimated time remaining for download completion
-        self.remaining = 0  # amount of data remaining to be downloaded
-        self.failed = False  # flag to indicate if download failure
-        self.completed = False  # flag to indicate if download is complete
+        self.size = inf
+        self.progress = 0
+        self.speed = 0
+        self.time_spent = 0
+        self.downloaded = 0
+        self.eta = "99:59:59"
+        self.remaining = 0
+        self.failed = False
+        self.completed = False
 
     def _display(self, multithread, interval):
         download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
@@ -88,9 +100,12 @@ class Downloader:
         else:
             self.eta = "99:59:59"
 
-    def _downloader(self, url, filepath, segments, display, multithread, etag):
+    def _downloader(self, url, file_path, segments, display, multithread, etag):
         start_time = time.time()
-        head = requests.head(url, timeout=20, allow_redirects=True, **self._kwargs)
+
+        kwargs = self._kwargs.copy()
+        del kwargs["params"]
+        head = requests.head(url, kwargs)
 
         if head.status_code != 200:
             self._error.set()
@@ -99,17 +114,17 @@ class Downloader:
 
         header = head.headers
         filename = get_filename(url, header)
-        filepath = filepath or filename
+        file_path = file_path or filename
 
-        if os.path.isdir(filepath):
-            filepath = os.path.join(filepath, filename)
+        if os.path.isdir(file_path):
+            file_path = os.path.join(file_path, filename)
 
         if size := int(header.get("content-length", 0)):
             self.size = size
 
         if self.size is inf or header.get("accept-ranges") is None:
             multithread = False
-            sd = Simpledown(url, filepath, self._stop, self._error, **self._kwargs)
+            sd = Simpledown(url, file_path, self._stop, self._error, **self._kwargs)
             th = threading.Thread(target=sd.worker)
             self._workers.append(sd)
             th.start()
@@ -118,7 +133,7 @@ class Downloader:
                 etag = etag.strip('"')
 
             self._segement_table = create_segment_table(
-                url, filepath, segments, self.size, etag
+                url, file_path, segments, self.size, etag
             )
             segments = self._segement_table["segments"]
             for segment in range(segments):
@@ -153,7 +168,7 @@ class Downloader:
 
             if status == len(self._workers):
                 if multithread:
-                    combine_files(filepath, segments)
+                    combine_files(file_path, segments)
                 self.completed = True
                 break
             time.sleep(interval)
@@ -172,13 +187,13 @@ class Downloader:
     def start(
         self,
         url: str,
-        filepath: Optional[str] = None,
+        file_path: Optional[str] = None,
         segments: int = 10,
         display: bool = True,
         multithread: bool = True,
         block: bool = True,
         retries: int = 0,
-        retry_func: Optional[Callable[[], str]] = None,
+        mirror_func: Optional[Callable[[], str]] = None,
         etag: bool = True,
     ):
         """
@@ -186,27 +201,27 @@ class Downloader:
 
         Parameters:
             url (str): The download URL.
-            filepath (str): The optional file path to save the download. by default it uses the present working directory,
-                If filepath is a directory then the file is downloaded into it else the file is downloaded with the given name.
+            file_path  (str): The optional file path to save the download. by default it uses the present working directory,
+                If file_path  is a directory then the file is downloaded into it else the file is downloaded with the given name.
             segments (int): The number of segments the file should be divided in multi-threaded download.
             display (bool): Whether to display download progress and other optional messages.
             multithread (bool): Whether to use multi-threaded download.
             block (bool): Whether to block until the download is complete.
             retries (int): The number of times to retry the download in case of an error.
-            retry_func (function): A function to call to get a new download URL in case of an error.
+            mirror_func (function): A function to get a new download URL in case of an error.
             etag (bool): Whether to validate etag before resuming downloads.
         """
 
         def download():
             for i in range(retries + 1):
                 try:
-                    _url = retry_func() if i > 0 and callable(retry_func) else url
+                    _url = mirror_func() if i > 0 and callable(mirror_func) else url
                     if i > 0 and display:
                         print(f"Retrying... ({i}/{retries})")
 
                     self.__init__(**self._kwargs)  # for stop/start func
                     self._downloader(
-                        _url, filepath, segments, display, multithread, etag
+                        _url, file_path, segments, display, multithread, etag
                     )
 
                     if not self._error.is_set():

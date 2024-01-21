@@ -41,13 +41,13 @@ def to_mb(size_in_bytes: int) -> float:
 
 
 def create_segment_table(
-    url: str, filepath: str, segments: str, size: int, etag: Union[str, bool]
+    url: str, file_path: str, segments: str, size: int, etag: Union[str, bool]
 ) -> Dict:
     """
     Create a segment table for multi-threaded download.
     """
     segments = 5 if (segments > 5) and (to_mb(size) < 50) else segments
-    progress_file = Path(filepath + ".json")
+    progress_file = Path(file_path + ".json")
 
     try:
         progress = json.loads(progress_file.read_text())
@@ -79,19 +79,19 @@ def create_segment_table(
             "start": start,
             "end": end,
             "segment_size": segment_size,
-            "path": f"{filepath}.{segment}.bin",
+            "segment_path": f"{file_path }.{segment}.bin",
         }
 
     return dic
 
 
-def combine_files(filepath: str, segments: int) -> None:
+def combine_files(file_path: str, segments: int) -> None:
     """
     Combine the downloaded file segments into a single file.
     """
-    with open(filepath, "wb") as dest:
+    with open(file_path, "wb") as dest:
         for i in range(segments):
-            segment_file = f"{filepath}.{i}.bin"
+            segment_file = f"{file_path }.{i}.bin"
             with open(segment_file, "rb") as src:
                 while True:
                     chunk = src.read(CHUNKSIZE)
@@ -101,7 +101,7 @@ def combine_files(filepath: str, segments: int) -> None:
                         break
             Path(segment_file).unlink()
 
-    progress_file = Path(filepath + ".json")
+    progress_file = Path(file_path + ".json")
     progress_file.unlink()
 
 
@@ -123,7 +123,7 @@ class Basicdown:
         """
         try:
             with open(path, mode) as f:
-                with requests.get(url, stream=True, timeout=20, **kwargs) as r:
+                with requests.get(url, stream=True, **kwargs) as r:
                     for chunk in r.iter_content(MEGABYTE):
                         if chunk:
                             f.write(chunk)
@@ -138,30 +138,30 @@ class Basicdown:
 
 class Simpledown(Basicdown):
     """
-    Class for downloading the whole file in a single part.
+    Class for downloading the whole file in a single segment.
     """
 
     def __init__(
         self,
         url: str,
-        path: str,
+        file_path: str,
         stop: threading.Event,
         error: threading.Event,
         **kwargs,
     ):
         super().__init__(stop, error)
         self.url = url
-        self.path = path
+        self.file_path = file_path
         self.kwargs = kwargs
 
     def worker(self) -> None:
-        self.download(self.url, self.path, mode="wb", **self.kwargs)
+        self.download(self.url, self.file_path, mode="wb", **self.kwargs)
         self.completed = 1
 
 
 class Multidown(Basicdown):
     """
-    Class for downloading a specific part of the file.
+    Class for downloading a specific segment of the file.
     """
 
     def __init__(
@@ -179,15 +179,15 @@ class Multidown(Basicdown):
 
     def worker(self) -> None:
         url = self.segement_table["url"]
-        path = Path(self.segement_table[self.segment_id]["path"])
+        segment_path = Path(self.segement_table[self.segment_id]["segment_path"])
         start = self.segement_table[self.segment_id]["start"]
         end = self.segement_table[self.segment_id]["end"]
         size = self.segement_table[self.segment_id]["segment_size"]
 
-        if path.exists():
-            downloaded_size = path.stat().st_size
+        if segment_path.exists():
+            downloaded_size = segment_path.stat().st_size
             if downloaded_size > size:
-                path.unlink()
+                segment_path.unlink()
             else:
                 self.curr = downloaded_size
 
@@ -195,7 +195,7 @@ class Multidown(Basicdown):
             start = start + self.curr
             kwargs = copy.deepcopy(self.kwargs)  # since used by others
             kwargs.setdefault("headers", {}).update({"range": f"bytes={start}-{end}"})
-            self.download(url, path, "ab", **kwargs)
+            self.download(url, segment_path, "ab", **kwargs)
 
         if self.curr == size:
             self.completed = 1

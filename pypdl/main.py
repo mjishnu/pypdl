@@ -41,10 +41,8 @@ class Downloader:
         self._threads = []
         self._error = threading.Event()
         self._stop = threading.Event()
-        self._kwargs = kwargs or {
-            "timeout": 20,
-            "allow_redirects": True,
-        }  # kwargs that are passed to request module
+        self._kwargs = {"timeout": 20, "allow_redirects": True}  # request module kwargs
+        self._kwargs.update(kwargs)
 
         self.size = inf
         self.progress = 0

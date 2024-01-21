@@ -31,4 +31,5 @@ setup(
         "download manager",
         "fast-downloader",
     ],
+    python_requires=">=3.8",
 )

@@ -1,13 +1,17 @@
 import copy
+import json
 import threading
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Union
 from urllib.parse import unquote, urlparse
-import json
+
 import requests
 
 MEGABYTE = 1048576
+BLOCKSIZE = 4096
+BLOCKS = 1024
+CHUNKSIZE = BLOCKSIZE * BLOCKS
 
 
 def get_filename(url: str, headers: Dict) -> str:
@@ -34,6 +38,71 @@ def timestring(sec: int) -> str:
 
 def to_mb(size_in_bytes: int) -> float:
     return size_in_bytes / MEGABYTE
+
+
+def create_segment_table(
+    url: str, filepath: str, segments: str, size: int, etag: Union[str, bool]
+) -> Dict:
+    """
+    Create a segment table for multi-threaded download.
+    """
+    segments = 5 if (segments > 5) and (to_mb(size) < 50) else segments
+    progress_file = Path(filepath + ".json")
+
+    try:
+        progress = json.loads(progress_file.read_text())
+        if etag and progress["url"] == url and progress["etag"] == etag:
+            segments = progress["segments"]
+    except Exception:
+        pass
+
+    progress_file.write_text(
+        json.dumps(
+            {"url": url, "etag": etag, "segments": segments},
+            indent=4,
+        )
+    )
+
+    dic = {}
+    dic["url"] = url
+    dic["segments"] = segments
+    partition_size = size / segments
+    for segment in range(segments):
+        start = int(partition_size * segment)
+        end = int(partition_size * (segment + 1))
+        segment_size = end - start
+        if segment != (segments - 1):
+            end -= 1  # [0-100, 100-200] -> [0-99, 100-200]
+        # No segment_size+=1 for last setgment since final byte is end byte
+
+        dic[segment] = {
+            "start": start,
+            "end": end,
+            "segment_size": segment_size,
+            "path": f"{filepath}.{segment}.bin",
+        }
+
+    return dic
+
+
+def combine_files(filepath: str, segments: int) -> None:
+    """
+    Combine the downloaded file segments into a single file.
+    """
+    with open(filepath, "wb") as dest:
+        for i in range(segments):
+            segment_file = f"{filepath}.{i}.bin"
+            with open(segment_file, "rb") as src:
+                while True:
+                    chunk = src.read(CHUNKSIZE)
+                    if chunk:
+                        dest.write(chunk)
+                    else:
+                        break
+            Path(segment_file).unlink()
+
+    progress_file = Path(filepath + ".json")
+    progress_file.unlink()
 
 
 class Basicdown:
@@ -97,23 +166,23 @@ class Multidown(Basicdown):
 
     def __init__(
         self,
-        dic: Dict,
-        id: int,
+        segement_table: Dict,
+        segment_id: int,
         stop: threading.Event,
         error: threading.Event,
         **kwargs,
     ):
         super().__init__(stop, error)
-        self.id = id
-        self.dic = dic
+        self.segment_id = segment_id
+        self.segement_table = segement_table
         self.kwargs = kwargs
 
     def worker(self) -> None:
-        url = self.dic["url"]
-        path = Path(self.dic[self.id]["path"])
-        start = self.dic[self.id]["start"]
-        end = self.dic[self.id]["end"]
-        size = self.dic[self.id]["segment_size"]
+        url = self.segement_table["url"]
+        path = Path(self.segement_table[self.segment_id]["path"])
+        start = self.segement_table[self.segment_id]["start"]
+        end = self.segement_table[self.segment_id]["end"]
+        size = self.segement_table[self.segment_id]["segment_size"]
 
         if path.exists():
             downloaded_size = path.stat().st_size
@@ -130,62 +199,3 @@ class Multidown(Basicdown):
 
         if self.curr == size:
             self.completed = 1
-
-
-def create_segement_table(url, filepath, segments, size, etag) -> Dict:
-    segments = 5 if (segments > 5) and (to_mb(size) < 50) else segments
-    progress_file = Path(filepath + ".json")
-
-    try:
-        progress = json.loads(progress_file.read_text())
-        if etag and progress["url"] == url and progress["etag"] == etag:
-            segments = progress["segments"]
-    except Exception:
-        pass
-
-    progress_file.write_text(
-        json.dumps(
-            {"url": url, "etag": etag, "segments": segments},
-            indent=4,
-        )
-    )
-
-    dic = {}
-    dic["url"] = url
-    dic["segments"] = segments
-    partition_size = size / segments
-    for segment in range(segments):
-        start = int(partition_size * segment)
-        end = int(partition_size * (segment + 1))
-        segment_size = end - start
-        if segment != (segments - 1):
-            end -= 1  # [0-100, 100-200] -> [0-99, 100-200]
-        # No segment_size+=1 for last setgment since final byte is end byte
-
-        dic[segment] = {
-            "start": start,
-            "end": end,
-            "segment_size": segment_size,
-            "path": f"{filepath}.{segment}.part",
-        }
-
-    return dic
-
-
-def combine_files(filepath, segments):
-    BLOCKSIZE = 4096
-    BLOCKS = 1024
-    CHUNKSIZE = BLOCKSIZE * BLOCKS
-    with open(filepath, "wb") as dest:
-        for i in range(segments):
-            file_ = f"{filepath}.{i}.part"
-            with open(file_, "rb") as f:
-                while True:
-                    chunk = f.read(CHUNKSIZE)
-                    if chunk:
-                        dest.write(chunk)
-                    else:
-                        break
-            Path(file_).unlink()
-    progress_file = Path(filepath + ".json")
-    progress_file.unlink()

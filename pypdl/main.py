@@ -8,7 +8,7 @@ from typing import Callable, Optional
 import requests
 from reprint import output
 
-from utls import (
+from .utls import (
     Multidown,
     Simpledown,
     combine_files,
@@ -36,7 +36,6 @@ class Downloader:
     """
 
     def __init__(self, **kwargs):
-        # private attributes
         self._segement_table = {}
         self._workers = []
         self._threads = []
@@ -47,7 +46,6 @@ class Downloader:
             "allow_redirects": True,
         }  # kwargs that are passed to request module
 
-        # public attributes
         self.size = inf
         self.progress = 0
         self.speed = 0
@@ -104,8 +102,8 @@ class Downloader:
         start_time = time.time()
 
         kwargs = self._kwargs.copy()
-        del kwargs["params"]
-        head = requests.head(url, kwargs)
+        kwargs.pop("params", None)
+        head = requests.head(url, **kwargs)
 
         if head.status_code != 200:
             self._error.set()
@@ -122,7 +120,7 @@ class Downloader:
         if size := int(header.get("content-length", 0)):
             self.size = size
 
-        if self.size is inf or header.get("accept-ranges") is None:
+        if not multithread or self.size is inf or header.get("accept-ranges") is None:
             multithread = False
             sd = Simpledown(url, file_path, self._stop, self._error, **self._kwargs)
             th = threading.Thread(target=sd.worker)

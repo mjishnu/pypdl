@@ -252,4 +252,4 @@ Contributions to pypdl are always welcome. If you want to contribute to this pro
 
 ## Contact
 
-If you have any questions, issues, or feedback about pypdl, please open an issue on the [GitHub repository](https://github.com/mjishnu/pypdl).
+If you have any questions, issues, or feedback about pypdl, please open an issue on the [GitHub repository](https://github.com/m-jishnu/pypdl).

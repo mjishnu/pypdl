@@ -182,14 +182,65 @@ The `Downloader` class represents a file downloader that can download a file fro
     ##### Parameters
 
     - `url`: (str) The download URL.
-    - `file_path`: (str) The optional file path to save the download. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded with the given name.
-    - `segments`: (int) The number of segments the file should be divided into for multi-threaded download.
-    - `display`: (bool) Whether to display download progress and other optional messages.
-    - `multithread`: (bool) Whether to use multi-threaded download.
-    - `block`: (bool) Whether to block until the download is complete.
-    - `retries`: (int) The number of times to retry the download in case of an error.
-    - `mirror_func`: (function) A function to get a new download URL in case of an error.
-    - `etag`: (bool) Whether to validate etag before resuming downloads.
+    - `file_path`: (str, Optional) The optional file path to save the download. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded with the given name.
+    - `segments`: (int, Optional) The number of segments the file should be divided into for multi-threaded download.
+    - `display`: (bool, Optional) Whether to display download progress and other optional messages.
+    - `multithread`: (bool, Optional) Whether to use multi-threaded download.
+    - `block`: (bool, Optional) Whether to block until the download is complete.
+    - `retries`: (int, Optional) The number of times to retry the download in case of an error.
+    - `mirror_func`: (function, Optional) A function to get a new download URL in case of an error.
+    - `etag`: (bool, Optional) Whether to validate etag before resuming downloads.
+
+### Helper Classes
+
+#### `Basicdown()`
+
+The `Basicdown` class is the base downloader class that provides the basic structure for downloading files.
+
+##### Attributes
+
+-   `curr`: The current size of the downloaded file in bytes.
+-   `completed`: A flag that indicates if the download is complete.
+-   `id`: The ID of the current instance.
+-   `stop`: An event that can be used to stop the download process.
+-   `error`: An event that can be used to signal an error.
+
+##### Methods
+
+-   `download(url, path, mode, **kwargs)`: Downloads data in chunks.
+
+#### `Simpledown()`
+
+The `Simpledown` class extends `Basicdown` and is responsible for downloading a whole file in a single segment.
+
+##### Parameters
+
+-   `url`: Url of the file.
+-   `file_path`: Path to save the file.
+-   `stop`: Stop event.
+-   `error`: Error event.
+-   `**kwargs`: Additional keyword arguments.
+
+##### Methods
+
+-   `worker()`: Downloads a whole file in a single segment.
+
+#### `Multidown()`
+
+The `Multidown` class extends `Basicdown` and is responsible for downloading a specific segment of a file.
+
+##### Parameters
+
+-   `segement_table`: Dictionary that contains the download information.
+-   `segment_id`: ID of the download part.
+-   `stop`: Stop event.
+-   `error`: Error event.
+-   `**kwargs`: Additional keyword arguments.
+
+##### Methods
+
+-   `worker()`: Downloads a part of the file in multiple segments.
+
 
 ## License
 

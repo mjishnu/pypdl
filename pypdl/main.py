@@ -201,15 +201,15 @@ class Downloader:
 
         Parameters:
             url (str): The download URL.
-            file_path  (str): The optional file path to save the download. by default it uses the present working directory,
+            file_path  (str, Optional): The optional file path to save the download. by default it uses the present working directory,
                 If file_path  is a directory then the file is downloaded into it else the file is downloaded with the given name.
-            segments (int): The number of segments the file should be divided in multi-threaded download.
-            display (bool): Whether to display download progress and other optional messages.
-            multithread (bool): Whether to use multi-threaded download.
-            block (bool): Whether to block until the download is complete.
-            retries (int): The number of times to retry the download in case of an error.
-            mirror_func (function): A function to get a new download URL in case of an error.
-            etag (bool): Whether to validate etag before resuming downloads.
+            segments (int, Optional): The number of segments the file should be divided in multi-threaded download.
+            display (bool, Optional): Whether to display download progress and other optional messages.
+            multithread (bool, Optional): Whether to use multi-threaded download.
+            block (bool, Optional): Whether to block until the download is complete.
+            retries (int, Optional): The number of times to retry the download in case of an error.
+            mirror_func (function, Optional): A function to get a new download URL in case of an error.
+            etag (bool, Optional): Whether to validate etag before resuming downloads.
         """
 
         def download():

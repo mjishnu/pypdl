@@ -15,15 +15,16 @@ CHUNKSIZE = BLOCKSIZE * BLOCKS
 
 
 def get_filename(url: str, headers: Dict) -> str:
-    content_disposition = headers.get("Content-Disposition")
+    content_disposition = headers.get("Content-Disposition", None)
 
-    if content_disposition is not None and "filename=" in content_disposition:
+    if content_disposition and "filename=" in content_disposition:
         filename_start = content_disposition.index("filename=") + len("filename=")
         filename = content_disposition[filename_start:]  # Get name from headers
         filename = filename.strip('"')
-        return unquote(filename)  # Decode URL encodings
     else:
-        return unquote(urlparse(url).path.split("/")[-1])  # Generate name from url
+        filename = urlparse(url).path.split("/")[-1]  # Generate name from url
+
+    return unquote(filename)  # Decode URL encodings
 
 
 def timestring(sec: int) -> str:
@@ -63,9 +64,7 @@ def create_segment_table(
         )
     )
 
-    dic = {}
-    dic["url"] = url
-    dic["segments"] = segments
+    dic = {"url": url, "segments": segments}
     partition_size = size / segments
     for segment in range(segments):
         start = int(partition_size * segment)

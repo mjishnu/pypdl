@@ -14,17 +14,23 @@ BLOCKS = 1024
 CHUNKSIZE = BLOCKSIZE * BLOCKS
 
 
-def get_filename(url: str, headers: Dict) -> str:
+def get_filepath(url: str, headers: Dict, file_path) -> str:
     content_disposition = headers.get("Content-Disposition", None)
 
     if content_disposition and "filename=" in content_disposition:
         filename_start = content_disposition.index("filename=") + len("filename=")
         filename = content_disposition[filename_start:]  # Get name from headers
-        filename = filename.strip('"')
+        filename = unquote(filename.strip('"'))  # Decode URL encodings
     else:
-        filename = urlparse(url).path.split("/")[-1]  # Generate name from url
+        filename = unquote(urlparse(url).path.split("/")[-1])  # Generate name from url
 
-    return unquote(filename)  # Decode URL encodings
+    if file_path:
+        file_path = Path(file_path)
+        if file_path.is_dir():
+            return str(file_path / filename)
+        return str(file_path)
+    else:
+        return filename
 
 
 def timestring(sec: int) -> str:
@@ -109,12 +115,11 @@ class Basicdown:
     Base downloader class.
     """
 
-    def __init__(self, stop: threading.Event, error: threading.Event):
+    def __init__(self, interrupt: threading.Event):
         self.curr = 0  # Downloaded size in bytes (current size)
         self.completed = 0
         self.id = 0
-        self.stop = stop
-        self.error = error
+        self.interrupt = interrupt
 
     def download(self, url: str, path: str, mode: str, **kwargs) -> None:
         """
@@ -127,10 +132,11 @@ class Basicdown:
                         if chunk:
                             f.write(chunk)
                             self.curr += len(chunk)
-                        if not chunk or self.stop.is_set() or self.error.is_set():
+                        if self.interrupt.is_set():
                             break
+
         except Exception as e:
-            self.error.set()
+            self.interrupt.set()
             time.sleep(1)
             print(f"Error in thread {self.id}: ({e.__class__.__name__}: {e})")
 
@@ -144,11 +150,10 @@ class Simpledown(Basicdown):
         self,
         url: str,
         file_path: str,
-        stop: threading.Event,
-        error: threading.Event,
+        interrupt: threading.Event,
         **kwargs,
     ):
-        super().__init__(stop, error)
+        super().__init__(interrupt)
         self.url = url
         self.file_path = file_path
         self.kwargs = kwargs
@@ -167,11 +172,10 @@ class Multidown(Basicdown):
         self,
         segement_table: Dict,
         segment_id: int,
-        stop: threading.Event,
-        error: threading.Event,
+        interrupt: threading.Event,
         **kwargs,
     ):
-        super().__init__(stop, error)
+        super().__init__(interrupt)
         self.segment_id = segment_id
         self.segement_table = segement_table
         self.kwargs = kwargs

@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Dict, Union
 from urllib.parse import unquote, urlparse
+import logging
 
 import requests
 
@@ -84,7 +85,7 @@ def create_segment_table(
             "start": start,
             "end": end,
             "segment_size": segment_size,
-            "segment_path": f"{file_path }.{segment}.bin",
+            "segment_path": f"{file_path }.{segment}",
         }
 
     return dic
@@ -96,7 +97,7 @@ def combine_files(file_path: str, segments: int) -> None:
     """
     with open(file_path, "wb") as dest:
         for segment in range(segments):
-            segment_file = f"{file_path}.{segment}.bin"
+            segment_file = f"{file_path}.{segment}"
             with open(segment_file, "rb") as src:
                 while True:
                     chunk = src.read(CHUNKSIZE)
@@ -120,25 +121,31 @@ class Basicdown:
         self.completed = False
         self.id = 0
         self.interrupt = interrupt
+        self.speed = 0
 
     def download(self, url: str, path: str, mode: str, **kwargs) -> None:
         """
         Download data in chunks.
         """
         try:
-            with open(path, mode) as f:
-                with requests.get(url, stream=True, **kwargs) as r:
-                    for chunk in r.iter_content(MEGABYTE):
-                        if chunk:
-                            f.write(chunk)
-                            self.curr += len(chunk)
-                        if self.interrupt.is_set():
-                            break
+            with open(path, mode) as f, requests.get(url, stream=True, **kwargs) as r:
+                start = time.time()
+                for chunk in r.iter_content(MEGABYTE):
+                    f.write(chunk)
+                    self.curr += len(chunk)
+
+                    end = time.time()
+                    self.speed = to_mb(len(chunk)) / (end - start)
+
+                    if self.interrupt.is_set():
+                        break
+
+                    start = time.time()
 
         except Exception as e:
             self.interrupt.set()
             time.sleep(1)
-            print(f"Error in thread {self.id}: ({e.__class__.__name__}: {e})")
+            logging.error(f"(Thread: {self.id}) [{e.__class__.__name__}: {e}]")
 
 
 class Simpledown(Basicdown):
@@ -176,16 +183,16 @@ class Multidown(Basicdown):
         **kwargs,
     ):
         super().__init__(interrupt)
-        self.segment_id = segment_id
+        self.id = segment_id
         self.segement_table = segement_table
         self.kwargs = kwargs
 
     def worker(self) -> None:
         url = self.segement_table["url"]
-        segment_path = Path(self.segement_table[self.segment_id]["segment_path"])
-        start = self.segement_table[self.segment_id]["start"]
-        end = self.segement_table[self.segment_id]["end"]
-        size = self.segement_table[self.segment_id]["segment_size"]
+        segment_path = Path(self.segement_table[self.id]["segment_path"])
+        start = self.segement_table[self.id]["start"]
+        end = self.segement_table[self.id]["end"]
+        size = self.segement_table[self.id]["segment_size"]
 
         if segment_path.exists():
             downloaded_size = segment_path.stat().st_size

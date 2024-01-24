@@ -1,8 +1,8 @@
 import threading
 import time
-from collections import deque
 from math import inf
 from typing import Callable, Optional
+import logging
 
 import requests
 from reprint import output
@@ -16,6 +16,8 @@ from utls import (
     get_filepath,
     to_mb,
 )
+
+logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 
 
 class Downloader:
@@ -74,22 +76,17 @@ class Downloader:
 
         print(f"Time elapsed: {timestring(self.time_spent)}")
 
-    def _calc_values(self, recent_queue, interval):
+    def _calc_values(self):
         self.downloaded = sum(worker.curr for worker in self._workers)
-        self.progress = (
-            int(100 * self.downloaded / self.size) if self.size != inf else 0
-        )
 
-        # Speed calculation
-        recent_queue.appendleft(self.downloaded)
-        non_zero_list = [value for value in recent_queue if value]
-        if len(non_zero_list) < 2:
-            self.speed = 0
+        if self.size != inf:
+            self.progress = int(100 * self.downloaded / self.size)
         else:
-            diff = [a - b for a, b in zip(non_zero_list, non_zero_list[1:])]
-            self.speed = to_mb(sum(diff) / len(diff)) / interval
+            self.progress = 0
 
+        self.speed = sum(worker.speed for worker in self._workers)
         self.remaining = to_mb(self.size - self.downloaded)
+
         if self.size != inf and self.speed != 0:
             self.eta = timestring(self.remaining / self.speed)
         else:
@@ -123,8 +120,9 @@ class Downloader:
 
         if head.status_code != 200:
             self._interrupt.set()
-            print(f"Server Returned: {head.reason}({head.status_code}), Invalid URL")
-            return
+            raise ConnectionError(
+                f"Server Returned: {head.reason}({head.status_code}), Invalid URL"
+            )
 
         header = head.headers
         file_path = get_filepath(url, header, file_path)
@@ -154,11 +152,9 @@ class Downloader:
             )
             display_thread.start()
 
-        recent_queue = deque([0] * 12, maxlen=12)
-
         while True:
             status = sum(worker.completed for worker in self._workers)
-            self._calc_values(recent_queue, interval)
+            self._calc_values()
 
             if self._interrupt.is_set():
                 break
@@ -215,7 +211,7 @@ class Downloader:
                 try:
                     _url = mirror_func() if i > 0 and callable(mirror_func) else url
                     if i > 0 and display:
-                        print(f"Retrying... ({i}/{retries})")
+                        logging.info(f"Retrying... ({i}/{retries})")
 
                     self.__init__(**self._kwargs)  # for stop/start func
                     self._downloader(
@@ -228,7 +224,7 @@ class Downloader:
                     time.sleep(3)
 
                 except Exception as e:
-                    print(f"Download Error: ({e.__class__.__name__}, {e})")
+                    logging.error(f"({e.__class__.__name__}) [{e}]")
                     self._interrupt.set()
 
             if not self._stop and self._interrupt.is_set():

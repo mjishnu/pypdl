@@ -95,8 +95,8 @@ def combine_files(file_path: str, segments: int) -> None:
     Combine the downloaded file segments into a single file.
     """
     with open(file_path, "wb") as dest:
-        for i in range(segments):
-            segment_file = f"{file_path }.{i}.bin"
+        for segment in range(segments):
+            segment_file = f"{file_path}.{segment}.bin"
             with open(segment_file, "rb") as src:
                 while True:
                     chunk = src.read(CHUNKSIZE)
@@ -106,7 +106,7 @@ def combine_files(file_path: str, segments: int) -> None:
                         break
             Path(segment_file).unlink()
 
-    progress_file = Path(file_path + ".json")
+    progress_file = Path(f"{file_path}.json")
     progress_file.unlink()
 
 
@@ -117,7 +117,7 @@ class Basicdown:
 
     def __init__(self, interrupt: threading.Event):
         self.curr = 0  # Downloaded size in bytes (current size)
-        self.completed = 0
+        self.completed = False
         self.id = 0
         self.interrupt = interrupt
 
@@ -160,7 +160,7 @@ class Simpledown(Basicdown):
 
     def worker(self) -> None:
         self.download(self.url, self.file_path, mode="wb", **self.kwargs)
-        self.completed = 1
+        self.completed = True
 
 
 class Multidown(Basicdown):
@@ -201,4 +201,4 @@ class Multidown(Basicdown):
             self.download(url, segment_path, "ab", **kwargs)
 
         if self.curr == size:
-            self.completed = 1
+            self.completed = True

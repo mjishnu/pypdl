@@ -30,7 +30,7 @@ class Downloader:
         cookies (dict, optional): A dictionary of cookies to send to the specified url. Default is None.
         headers (dict, optional): A dictionary of HTTP headers to send to the specified url. Default is None.
         proxies (dict, optional): A dictionary of the protocol to the proxy url. Default is None.
-        timeout (number or tuple, optional): A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 20 seconds.
+        timeout (number or tuple, optional): A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 5 seconds.
         verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
     """
 
@@ -40,7 +40,7 @@ class Downloader:
         self._threads = []
         self._interrupt = threading.Event()
         self._stop = False
-        self._kwargs = {"timeout": 20, "allow_redirects": True}  # request module kwargs
+        self._kwargs = {"timeout": 5, "allow_redirects": True}  # request module kwargs
         self._kwargs.update(kwargs)
 
         self.size = inf
@@ -101,8 +101,7 @@ class Downloader:
         self._workers.append(sd)
         th.start()
 
-    def _multi_thread(self, url, file_path):
-        segments = self._segement_table["segments"]
+    def _multi_thread(self, url, file_path, segments):
         for segment in range(segments):
             md = Multidown(
                 self._segement_table,
@@ -144,7 +143,8 @@ class Downloader:
             self._segement_table = create_segment_table(
                 url, file_path, segments, self.size, etag
             )
-            self._multi_thread(url, file_path)
+            segments = self._segement_table["segments"]
+            self._multi_thread(url, file_path, segments)
 
         interval = 0.15
 

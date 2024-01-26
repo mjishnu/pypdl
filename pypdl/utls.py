@@ -1,11 +1,13 @@
 import copy
+import hashlib
 import json
-import threading
+import logging
 import time
 from pathlib import Path
+from threading import Event
 from typing import Dict, Union
 from urllib.parse import unquote, urlparse
-import logging
+from concurrent.futures import Future, Executor
 
 import requests
 
@@ -34,14 +36,9 @@ def get_filepath(url: str, headers: Dict, file_path) -> str:
         return filename
 
 
-def timestring(sec: int) -> str:
-    """
-    Converts seconds to a string formatted as HH:MM:SS.
-    """
-    sec = int(sec)
-    m, s = divmod(sec, 60)
-    h, m = divmod(m, 60)
-    return f"{h:02d}:{m:02d}:{s:02d}"
+def seconds_to_hms(sec: float) -> str:
+    time_struct = time.gmtime(sec)
+    return time.strftime("%H:%M:%S", time_struct)
 
 
 def to_mb(size_in_bytes: int) -> float:
@@ -116,7 +113,7 @@ class Basicdown:
     Base downloader class.
     """
 
-    def __init__(self, interrupt: threading.Event):
+    def __init__(self, interrupt: Event):
         self.curr = 0  # Downloaded size in bytes (current size)
         self.completed = False
         self.id = 0
@@ -135,7 +132,8 @@ class Basicdown:
                     self.curr += len(chunk)
 
                     end = time.time()
-                    self.speed = to_mb(len(chunk)) / (end - start)
+                    total = end - start
+                    self.speed = to_mb(len(chunk)) / total if total else self.speed
 
                     if self.interrupt.is_set():
                         break
@@ -157,7 +155,7 @@ class Simpledown(Basicdown):
         self,
         url: str,
         file_path: str,
-        interrupt: threading.Event,
+        interrupt: Event,
         **kwargs,
     ):
         super().__init__(interrupt)
@@ -179,7 +177,7 @@ class Multidown(Basicdown):
         self,
         segement_table: Dict,
         segment_id: int,
-        interrupt: threading.Event,
+        interrupt: Event,
         **kwargs,
     ):
         super().__init__(interrupt)
@@ -209,3 +207,41 @@ class Multidown(Basicdown):
 
         if self.curr == size:
             self.completed = True
+
+
+class FileValidator:
+    """
+    A class used to validate the integrity of the file.
+    """
+
+    def __init__(self, path: str):
+        self.path = path
+
+    def calculate_hash(self, algorithm: str, **kwargs) -> str:
+        hash_obj = hashlib.new(algorithm, **kwargs)
+        with open(self.path, "rb") as file:
+            for chunk in iter(lambda: file.read(4096), b""):
+                hash_obj.update(chunk)
+        return hash_obj.hexdigest()
+
+    def validate_hash(self, correct_hash: str, algorithm: str, **kwargs) -> bool:
+        file_hash = self.calculate_hash(algorithm, **kwargs)
+        return file_hash == correct_hash
+
+
+class AutoShutdownFuture:
+    """
+    A Future object wrapper that shuts down the executor when the result is retrieved.
+    """
+
+    def __init__(self, future: Future, executor: Executor):
+        self.future = future
+        self.executor = executor
+
+    def result(self, timeout: float = None) -> Union[FileValidator, None]:
+        result = self.future.result(timeout)
+        self.executor.shutdown()
+        return result
+
+    def done(self) -> bool:
+        return self.future.done()

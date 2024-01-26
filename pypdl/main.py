@@ -1,7 +1,7 @@
-import threading
+from threading import Event
 import time
-from math import inf
-from typing import Callable, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable, Optional, Union
 import logging
 
 import requests
@@ -10,11 +10,13 @@ from reprint import output
 from utls import (
     Multidown,
     Simpledown,
+    FileValidator,
     combine_files,
     create_segment_table,
-    timestring,
+    seconds_to_hms,
     get_filepath,
     to_mb,
+    AutoShutdownFuture,
 )
 
 logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
@@ -37,21 +39,21 @@ class Downloader:
     """
 
     def __init__(self, **kwargs):
-        self._segement_table = {}
+        self._pool = ThreadPoolExecutor(max_workers=2)
         self._workers = []
-        self._threads = []
-        self._interrupt = threading.Event()
+        self._interrupt = Event()
         self._stop = False
         self._kwargs = {"timeout": 5, "allow_redirects": True}  # request module kwargs
         self._kwargs.update(kwargs)
 
-        self.size = inf
+        # public attributes
+        self.size = None
         self.progress = 0
         self.speed = 0
         self.time_spent = 0
         self.downloaded = 0
         self.eta = "99:59:59"
-        self.remaining = 0
+        self.remaining = None
         self.failed = False
         self.completed = False
 
@@ -59,7 +61,7 @@ class Downloader:
         download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
         with output(initial_len=2, interval=interval) as dynamic_print:
             while True:
-                if self.size != inf:
+                if self.size:
                     progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}%"
                     progress_stats = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
                     dynamic_print[0] = progress_bar
@@ -74,29 +76,25 @@ class Downloader:
 
                 time.sleep(interval)
 
-        print(f"Time elapsed: {timestring(self.time_spent)}")
+        print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
 
     def _calc_values(self):
         self.downloaded = sum(worker.curr for worker in self._workers)
+        self.speed = sum(worker.speed for worker in self._workers) / len(self._workers)
 
-        if self.size != inf:
+        if self.size:
             self.progress = int(100 * self.downloaded / self.size)
-        else:
-            self.progress = 0
+            self.remaining = to_mb(self.size - self.downloaded)
 
-        self.speed = sum(worker.speed for worker in self._workers)
-        self.remaining = to_mb(self.size - self.downloaded)
-
-        if self.size != inf and self.speed != 0:
-            self.eta = timestring(self.remaining / self.speed)
-        else:
-            self.eta = "99:59:59"
+            if self.speed:
+                self.eta = seconds_to_hms(self.remaining / self.speed)
+            else:
+                self.eta = "99:59:59"
 
     def _single_thread(self, url, file_path):
         sd = Simpledown(url, file_path, self._interrupt, **self._kwargs)
-        th = threading.Thread(target=sd.worker)
         self._workers.append(sd)
-        th.start()
+        self._pool.submit(sd.worker)
 
     def _multi_thread(self, url, file_path, segments):
         for segment in range(segments):
@@ -106,14 +104,10 @@ class Downloader:
                 self._interrupt,
                 **self._kwargs,
             )
-            th = threading.Thread(target=md.worker)
-            th.start()
-            self._threads.append(th)
             self._workers.append(md)
+            self._pool.submit(md.worker)
 
-    def _downloader(self, url, file_path, segments, display, multithread, etag):
-        start_time = time.time()
-
+    def _get_header(self, url):
         kwargs = self._kwargs.copy()
         kwargs.pop("params", None)
         head = requests.head(url, **kwargs)
@@ -124,17 +118,18 @@ class Downloader:
                 f"Server Returned: {head.reason}({head.status_code}), Invalid URL"
             )
 
-        header = head.headers
+        return head.headers
+
+    def _downloader(self, url, file_path, segments, display, multithread, etag):
+        start_time = time.time()
+
+        header = self._get_header(url)
         file_path = get_filepath(url, header, file_path)
 
         if size := int(header.get("content-length", 0)):
             self.size = size
 
-        if not multithread or self.size is inf or header.get("accept-ranges") is None:
-            multithread = False
-            self._single_thread(url, file_path)
-
-        else:
+        if self.size and header.get("accept-ranges") and multithread:
             if etag := header.get("etag", not etag):
                 etag = etag.strip('"')
 
@@ -142,41 +137,44 @@ class Downloader:
                 url, file_path, segments, self.size, etag
             )
             segments = self._segement_table["segments"]
+
+            self._pool.shutdown()
+            self._pool = ThreadPoolExecutor(max_workers=segments + 1)
+
             self._multi_thread(url, file_path, segments)
+        else:
+            multithread = False
+            self._single_thread(url, file_path)
 
         interval = 0.15
 
         if display:
-            display_thread = threading.Thread(
-                target=self._display, args=[multithread, interval]
-            )
-            display_thread.start()
+            self._pool.submit(self._display, multithread, interval)
 
         while True:
             status = sum(worker.completed for worker in self._workers)
             self._calc_values()
 
             if self._interrupt.is_set():
-                break
+                self.time_spent = time.time() - start_time
+                return None
 
             elif status == len(self._workers):
                 if multithread:
                     combine_files(file_path, segments)
                 self.completed = True
-                break
+                self.time_spent = time.time() - start_time
+                return FileValidator(file_path)
+
             time.sleep(interval)
 
-        self.time_spent = time.time() - start_time
-
-    def stop(self):
+    def stop(self) -> None:
         """
         Stop the download process.
         """
-        time.sleep(3)
         self._interrupt.set()
         self._stop = True
-        for thread in self._threads:  # waiting for threads to die
-            thread.join()
+        time.sleep(1)
 
     def start(
         self,
@@ -189,21 +187,26 @@ class Downloader:
         retries: int = 0,
         mirror_func: Optional[Callable[[], str]] = None,
         etag: bool = True,
-    ):
+    ) -> Union[AutoShutdownFuture, FileValidator, None]:
         """
         Start the download process.
 
         Parameters:
-            url (str): The download URL.
-            file_path  (str, Optional): The optional file path to save the download. by default it uses the present working directory,
-                If file_path  is a directory then the file is downloaded into it else the file is downloaded with the given name.
-            segments (int, Optional): The number of segments the file should be divided in multi-threaded download.
-            display (bool, Optional): Whether to display download progress and other opt_stopional messages.
-            multithread (bool, Optional): Whether to use multi-threaded download.
-            block (bool, Optional): Whether to block until the download is complete.
-            retries (int, Optional): The number of times to retry the download in case of an error.
-            mirror_func (function, Optional): A function to get a new download URL in case of an error.
-            etag (bool, Optional): Whether to validate etag before resuming downloads.
+            url (str): The URL to download from.
+            file_path (str, Optional): The path to save the downloaded file. If not provided, the file is saved in the current working directory.
+                If `file_path` is a directory, the file is saved in that directory. If `file_path` is a file name, the file is saved with that name.
+            segments (int, Optional): The number of segments to divide the file into for multi-threaded download. Default is 10.
+            display (bool, Optional): Whether to display download progress and other messages. Default is True.
+            multithread (bool, Optional): Whether to use multi-threaded download. Default is True.
+            block (bool, Optional): Whether to block the function until the download is complete. Default is True.
+            retries (int, Optional): The number of times to retry the download if it fails. Default is 0.
+            mirror_func (Callable[[], str], Optional): A function that returns a new download URL if the download fails. Default is None.
+            etag (bool, Optional): Whether to validate the ETag before resuming downloads. Default is True.
+
+        Returns:
+            AutoShutdownFuture: If `block` is False.
+            FileValidator: If `block` is True and the download successful.
+            None: If `block` is True and the download fails.
         """
 
         def download():
@@ -214,24 +217,28 @@ class Downloader:
                         logging.info(f"Retrying... ({i}/{retries})")
 
                     self.__init__(**self._kwargs)  # for stop/start func
-                    self._downloader(
+                    result = self._downloader(
                         _url, file_path, segments, display, multithread, etag
                     )
 
                     if self._stop or self.completed:
-                        break
+                        return result
 
                     time.sleep(3)
 
                 except Exception as e:
                     logging.error(f"({e.__class__.__name__}) [{e}]")
-                    self._interrupt.set()
 
-            if not self._stop and self._interrupt.is_set():
-                self.failed = True
+                finally:
+                    self._pool.shutdown()
 
-        download_thread = threading.Thread(target=download)
-        download_thread.start()
+            self.failed = True
+
+        ex = ThreadPoolExecutor(max_workers=1)
+        future = AutoShutdownFuture(ex.submit(download), ex)
 
         if block:
-            download_thread.join()
+            result = future.result()
+            return result
+
+        return future

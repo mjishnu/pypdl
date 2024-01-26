@@ -3,11 +3,11 @@ import hashlib
 import json
 import logging
 import time
+from concurrent.futures import Executor, Future
 from pathlib import Path
 from threading import Event
 from typing import Dict, Union
 from urllib.parse import unquote, urlparse
-from concurrent.futures import Future, Executor
 
 import requests
 
@@ -118,27 +118,23 @@ class Basicdown:
         self.completed = False
         self.id = 0
         self.interrupt = interrupt
-        self.speed = 0
+        self.downloaded = 0
 
     def download(self, url: str, path: str, mode: str, **kwargs) -> None:
         """
         Download data in chunks.
         """
         try:
-            with open(path, mode) as f, requests.get(url, stream=True, **kwargs) as r:
-                start = time.time()
-                for chunk in r.iter_content(MEGABYTE):
-                    f.write(chunk)
+            with open(path, mode) as file, requests.get(
+                url, stream=True, **kwargs
+            ) as response:
+                for chunk in response.iter_content(MEGABYTE):
+                    file.write(chunk)
                     self.curr += len(chunk)
-
-                    end = time.time()
-                    total = end - start
-                    self.speed = to_mb(len(chunk)) / total if total else self.speed
+                    self.downloaded += len(chunk)
 
                     if self.interrupt.is_set():
                         break
-
-                    start = time.time()
 
         except Exception as e:
             self.interrupt.set()

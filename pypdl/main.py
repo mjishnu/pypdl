@@ -1,22 +1,23 @@
-from threading import Event
-import time
-from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Optional, Union
 import logging
+import time
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+from typing import Callable, Optional, Union
 
 import requests
 from reprint import output
 
 from utls import (
+    AutoShutdownFuture,
+    FileValidator,
     Multidown,
     Simpledown,
-    FileValidator,
     combine_files,
     create_segment_table,
-    seconds_to_hms,
     get_filepath,
+    seconds_to_hms,
     to_mb,
-    AutoShutdownFuture,
 )
 
 logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
@@ -34,7 +35,7 @@ class Downloader:
         cookies (dict, optional): A dictionary of cookies to send to the specified url. Default is None.
         headers (dict, optional): A dictionary of HTTP headers to send to the specified url. Default is None.
         proxies (dict, optional): A dictionary of the protocol to the proxy url. Default is None.
-        timeout (number or tuple, optional): A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 5 seconds.
+        timeout (number or tuple, optional): A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 10 seconds.
         verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
     """
 
@@ -43,7 +44,7 @@ class Downloader:
         self._workers = []
         self._interrupt = Event()
         self._stop = False
-        self._kwargs = {"timeout": 5, "allow_redirects": True}  # request module kwargs
+        self._kwargs = {"timeout": 10, "allow_redirects": True}  # request module kwargs
         self._kwargs.update(kwargs)
 
         # public attributes
@@ -51,7 +52,7 @@ class Downloader:
         self.progress = 0
         self.speed = 0
         self.time_spent = 0
-        self.downloaded = 0
+        self.current_size = 0
         self.eta = "99:59:59"
         self.remaining = None
         self.failed = False
@@ -67,7 +68,7 @@ class Downloader:
                     dynamic_print[0] = progress_bar
                     dynamic_print[1] = progress_stats
                 else:
-                    download_stats = f"Downloaded: {to_mb(self.downloaded):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s"
+                    download_stats = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s"
                     dynamic_print[0] = "Downloading..."
                     dynamic_print[1] = download_stats
 
@@ -78,13 +79,23 @@ class Downloader:
 
         print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
 
-    def _calc_values(self):
-        self.downloaded = sum(worker.curr for worker in self._workers)
-        self.speed = sum(worker.speed for worker in self._workers) / len(self._workers)
+    def _calc_values(self, recent_queue, interval):
+        self.current_size = sum(worker.curr for worker in self._workers)
+
+        # Speed calculation
+        recent_queue.append(sum(worker.downloaded for worker in self._workers))
+        non_zero_list = [to_mb(value) for value in recent_queue if value]
+        if len(non_zero_list) < 1:
+            self.speed = 0
+        elif len(non_zero_list) == 1:
+            self.speed = non_zero_list[0] / interval
+        else:
+            diff = [b - a for a, b in zip(non_zero_list, non_zero_list[1:])]
+            self.speed = (sum(diff) / len(diff)) / interval
 
         if self.size:
-            self.progress = int(100 * self.downloaded / self.size)
-            self.remaining = to_mb(self.size - self.downloaded)
+            self.progress = int(100 * self.current_size / self.size)
+            self.remaining = to_mb(self.size - self.current_size)
 
             if self.speed:
                 self.eta = seconds_to_hms(self.remaining / self.speed)
@@ -110,15 +121,15 @@ class Downloader:
     def _get_header(self, url):
         kwargs = self._kwargs.copy()
         kwargs.pop("params", None)
-        head = requests.head(url, **kwargs)
+        response = requests.head(url, **kwargs)
 
-        if head.status_code != 200:
+        if response.status_code != 200:
             self._interrupt.set()
             raise ConnectionError(
-                f"Server Returned: {head.reason}({head.status_code}), Invalid URL"
+                f"Server Returned: {response.reason}({response.status_code}), Invalid URL"
             )
 
-        return head.headers
+        return response.headers
 
     def _downloader(self, url, file_path, segments, display, multithread, etag):
         start_time = time.time()
@@ -147,13 +158,14 @@ class Downloader:
             self._single_thread(url, file_path)
 
         interval = 0.15
+        recent_queue = deque([0] * 12, maxlen=12)
 
         if display:
             self._pool.submit(self._display, multithread, interval)
 
         while True:
             status = sum(worker.completed for worker in self._workers)
-            self._calc_values()
+            self._calc_values(recent_queue, interval)
 
             if self._interrupt.is_set():
                 self.time_spent = time.time() - start_time
@@ -174,7 +186,7 @@ class Downloader:
         """
         self._interrupt.set()
         self._stop = True
-        time.sleep(1)
+        time.sleep(1)  # wait for threads
 
     def start(
         self,
@@ -216,7 +228,7 @@ class Downloader:
                     if i > 0 and display:
                         logging.info(f"Retrying... ({i}/{retries})")
 
-                    self.__init__(**self._kwargs)  # for stop/start func
+                    self.__init__(**self._kwargs)
                     result = self._downloader(
                         _url, file_path, segments, display, multithread, etag
                     )

@@ -181,9 +181,7 @@ class Downloader:
             time.sleep(interval)
 
     def stop(self) -> None:
-        """
-        Stop the download process.
-        """
+        """Stop the download process."""
         self._interrupt.set()
         self._stop = True
         time.sleep(1)  # wait for threads

@@ -115,7 +115,6 @@ class Basicdown:
 
     def download(self, url: str, path: str, mode: str, **kwargs) -> None:
         """Download data in chunks."""
-
         try:
             with open(path, mode) as file, requests.get(
                 url, stream=True, **kwargs

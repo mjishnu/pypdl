@@ -32,8 +32,7 @@ def get_filepath(url: str, headers: Dict, file_path) -> str:
         if file_path.is_dir():
             return str(file_path / filename)
         return str(file_path)
-    else:
-        return filename
+    return filename
 
 
 def seconds_to_hms(sec: float) -> str:
@@ -48,9 +47,7 @@ def to_mb(size_in_bytes: int) -> float:
 def create_segment_table(
     url: str, file_path: str, segments: str, size: int, etag: Union[str, bool]
 ) -> Dict:
-    """
-    Create a segment table for multi-threaded download.
-    """
+    """Create a segment table for multi-threaded download."""
     segments = 5 if (segments > 5) and (to_mb(size) < 50) else segments
     progress_file = Path(file_path + ".json")
 
@@ -89,9 +86,7 @@ def create_segment_table(
 
 
 def combine_files(file_path: str, segments: int) -> None:
-    """
-    Combine the downloaded file segments into a single file.
-    """
+    """Combine the downloaded file segments into a single file."""
     with open(file_path, "wb") as dest:
         for segment in range(segments):
             segment_file = f"{file_path}.{segment}"
@@ -109,9 +104,7 @@ def combine_files(file_path: str, segments: int) -> None:
 
 
 class Basicdown:
-    """
-    Base downloader class.
-    """
+    """Base downloader class."""
 
     def __init__(self, interrupt: Event):
         self.curr = 0  # Downloaded size in bytes (current size)
@@ -121,9 +114,8 @@ class Basicdown:
         self.downloaded = 0
 
     def download(self, url: str, path: str, mode: str, **kwargs) -> None:
-        """
-        Download data in chunks.
-        """
+        """Download data in chunks."""
+
         try:
             with open(path, mode) as file, requests.get(
                 url, stream=True, **kwargs
@@ -139,13 +131,11 @@ class Basicdown:
         except Exception as e:
             self.interrupt.set()
             time.sleep(1)
-            logging.error(f"(Thread: {self.id}) [{e.__class__.__name__}: {e}]")
+            logging.error("(Thread: %d) [%s: %s]", self.id, type(e).__name__, e)
 
 
 class Simpledown(Basicdown):
-    """
-    Class for downloading the whole file in a single segment.
-    """
+    """Class for downloading the whole file in a single segment."""
 
     def __init__(
         self,
@@ -165,9 +155,7 @@ class Simpledown(Basicdown):
 
 
 class Multidown(Basicdown):
-    """
-    Class for downloading a specific segment of the file.
-    """
+    """Class for downloading a specific segment of the file."""
 
     def __init__(
         self,
@@ -206,9 +194,7 @@ class Multidown(Basicdown):
 
 
 class FileValidator:
-    """
-    A class used to validate the integrity of the file.
-    """
+    """A class used to validate the integrity of the file."""
 
     def __init__(self, path: str):
         self.path = path
@@ -226,9 +212,7 @@ class FileValidator:
 
 
 class AutoShutdownFuture:
-    """
-    A Future object wrapper that shuts down the executor when the result is retrieved.
-    """
+    """A Future object wrapper that shuts down the executor when the result is retrieved."""
 
     def __init__(self, future: Future, executor: Executor):
         self.future = future
@@ -238,6 +222,3 @@ class AutoShutdownFuture:
         result = self.future.result(timeout)
         self.executor.shutdown()
         return result
-
-    def done(self) -> bool:
-        return self.future.done()

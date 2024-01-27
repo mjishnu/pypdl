@@ -1,6 +1,6 @@
 # pypdl
 
-pypdl is a Python library for downloading files from the internet. It provides features such as multi-threaded downloads, retry download in case of failure, option to continue downloading using a different URL if necessary, progress tracking, pause/resume functionality, and many more.
+pypdl is a Python library for downloading files from the internet. It provides features such as multi-threaded downloads, retry download in case of failure, option to continue downloading using a different URL if necessary, progress tracking, pause/resume functionality, checksum and many more.
 
 ## Table of Contents
 
@@ -33,7 +33,7 @@ pip install pypdl
 
 To download a file using the pypdl, simply create a new `Downloader` object and call its `start` method, passing in the URL of the file to be downloaded:
 
-```python
+```py
 from pypdl import Downloader
 
 dl = Downloader()
@@ -44,7 +44,7 @@ dl.start('http://example.com/file.txt')
 
 The `Downloader` object provides additional options for advanced usage:
 
-```python
+```py
 dl.start(
     url='http://example.com/file.txt',
     file_path='file.txt',
@@ -74,7 +74,7 @@ Each option is explained below:
 
 Here is an example that demonstrates how to use pypdl library to download a file using headers, proxies and authentication:
 
-```python
+```py
 from pypdl import Downloader
 
 def main():
@@ -112,7 +112,7 @@ This example downloads a file from the internet using 10 threads and displays th
 
 Another example of implementing pause resume functionality and printing the progress to console:
 
-```python
+```py
 from pypdl import Downloader
 from threading import Event
 
@@ -145,6 +145,37 @@ while not d.completed:
 
 This example we start the download process and print the progress to console. We then stop the download process and do something else. After that we resume the download process and print the rest of the progress to console. This can be used to create a pause/resume functionality.
 
+Another example of using hash validation:
+
+```py
+from pypdl import Downloader
+
+# create a downloader object
+dl = Downloader()
+
+# if block = True --> returns a FileValidator object
+file = dl.start('https://example.com/file.zip', block=True) 
+
+# validate hash
+if file.validate_hash(correct_hash,'sha256'):
+    print('Hash is valid')
+else:
+    print('Hash is invalid')
+
+# if block = False --> returns a AutoShutdownFuture object
+file = dl.start('https://example.com/file.zip', block=False)
+
+# do something
+# ...
+
+# validate hash
+if dl.completed:
+  if file.result().validate_hash(correct_hash,'sha256'):
+      print('Hash is valid')
+  else:
+      print('Hash is invalid')
+```
+
 ## API Reference
 
 ### `Downloader()`
@@ -169,7 +200,7 @@ The `Downloader` class represents a file downloader that can download a file fro
 - `progress`: The download progress percentage.
 - `speed`: The download speed, in MB/s.
 - `time_spent`: The time spent downloading, in seconds.
-- `downloaded`: The amount of data downloaded so far, in bytes.
+- `current_size`: The amount of data downloaded so far, in bytes.
 - `eta`: The estimated time remaining for download completion, in the format "HH:MM:SS".
 - `remaining`: The amount of data remaining to be downloaded, in bytes.
 - `failed`: A flag that indicates if the download failed.
@@ -177,7 +208,7 @@ The `Downloader` class represents a file downloader that can download a file fro
 
 #### Methods
 
--   `start(url, file_path, segments=10, display=True, multithread=True, block=True, retries=0, mirror_func=None, etag=False)`: Starts the download process.
+- `start(url, file_path, segments=10, display=True, multithread=True, block=True, retries=0, mirror_func=None, etag=False)`: Starts the download process.
 
     ##### Parameters
 
@@ -191,6 +222,14 @@ The `Downloader` class represents a file downloader that can download a file fro
     - `mirror_func`: (function, Optional) A function to get a new download URL in case of an error.
     - `etag`: (bool, Optional) Whether to validate etag before resuming downloads.
 
+    ##### Returns
+    
+    - `AutoShutdownFuture`: If `block` is `False`.
+    - `FileValidator`: If `block` is `True` and the download is successful.
+    - `None`: If `block` is `True` and the download fails.
+
+- `stop()`: Stops the download process.
+
 ### Helper Classes
 
 #### `Basicdown()`
@@ -199,15 +238,15 @@ The `Basicdown` class is the base downloader class that provides the basic struc
 
 ##### Attributes
 
--   `curr`: The current size of the downloaded file in bytes.
--   `completed`: A flag that indicates if the download is complete.
--   `id`: The ID of the current instance.
--   `stop`: An event that can be used to stop the download process.
--   `error`: An event that can be used to signal an error.
+- `curr`: The current size of the downloaded file in bytes.
+- `completed`: A flag that indicates if the download is complete.
+- `id`: The ID of the current instance.
+- `stop`: An event that can be used to stop the download process.
+- `error`: An event that can be used to signal an error.
 
 ##### Methods
 
--   `download(url, path, mode, **kwargs)`: Downloads data in chunks.
+- `download(url, path, mode, **kwargs)`: Downloads data in chunks.
 
 #### `Simpledown()`
 
@@ -215,15 +254,15 @@ The `Simpledown` class extends `Basicdown` and is responsible for downloading a 
 
 ##### Parameters
 
--   `url`: Url of the file.
--   `file_path`: Path to save the file.
--   `stop`: Stop event.
--   `error`: Error event.
--   `**kwargs`: Additional keyword arguments.
+- `url`: Url of the file.
+- `file_path`: Path to save the file.
+- `stop`: Stop event.
+- `error`: Error event.
+- `**kwargs`: Additional keyword arguments.
 
 ##### Methods
 
--   `worker()`: Downloads a whole file in a single segment.
+- `worker()`: Downloads a whole file in a single segment.
 
 #### `Multidown()`
 
@@ -231,16 +270,44 @@ The `Multidown` class extends `Basicdown` and is responsible for downloading a s
 
 ##### Parameters
 
--   `segement_table`: Dictionary that contains the download information.
--   `segment_id`: ID of the download part.
--   `stop`: Stop event.
--   `error`: Error event.
--   `**kwargs`: Additional keyword arguments.
+- `segement_table`: Dictionary that contains the download information.
+- `segment_id`: ID of the download part.
+- `stop`: Stop event.
+- `error`: Error event.
+- `**kwargs`: Additional keyword arguments.
 
 ##### Methods
 
--   `worker()`: Downloads a part of the file in multiple segments.
+- `worker()`: Downloads a part of the file in multiple segments.
 
+#### `FileValidator()`
+
+The `FileValidator` class is used to validate the integrity of the downloaded file.
+
+##### Parameters
+
+- `path`: The path of the file to be validated.
+
+##### Methods
+
+- `calculate_hash(algorithm, **kwargs)`: Calculates the hash of the file using the specified algorithm. Returns the calculated hash as a string.
+
+- `validate_hash(correct_hash, algorithm, **kwargs)`: Validates the hash of the file against the correct hash. Returns `True` if the hashes match, `False` otherwise.
+
+  `calculate_hash` and `validate_hash` can support additional keyword arguments from the [hashlib module](https://docs.python.org/3/library/hashlib.html#hashlib.new).
+
+#### `AutoShutdownFuture()`
+
+The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object that shuts down the executor when the result is retrieved.
+
+##### Parameters
+
+- `future`: The Future object to be wrapped.
+- `executor`: The executor to be shut down when the result is retrieved.
+
+##### Methods
+
+- `result(timeout=None)`: Retrieves the result of the Future object and shuts down the executor. Returns the result of the Future object.
 
 ## License
 

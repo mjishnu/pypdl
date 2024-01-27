@@ -8,7 +8,7 @@ from typing import Callable, Optional, Union
 import requests
 from reprint import output
 
-from utls import (
+from .utls import (
     AutoShutdownFuture,
     FileValidator,
     Multidown,
@@ -107,10 +107,10 @@ class Downloader:
         self._workers.append(sd)
         self._pool.submit(sd.worker)
 
-    def _multi_thread(self, url, file_path, segments):
+    def _multi_thread(self, segments, segement_table):
         for segment in range(segments):
             md = Multidown(
-                self._segement_table,
+                segement_table,
                 segment,
                 self._interrupt,
                 **self._kwargs,
@@ -144,15 +144,15 @@ class Downloader:
             if etag := header.get("etag", not etag):
                 etag = etag.strip('"')
 
-            self._segement_table = create_segment_table(
+            segement_table = create_segment_table(
                 url, file_path, segments, self.size, etag
             )
-            segments = self._segement_table["segments"]
+            segments = segement_table["segments"]
 
             self._pool.shutdown()
             self._pool = ThreadPoolExecutor(max_workers=segments + 1)
 
-            self._multi_thread(url, file_path, segments)
+            self._multi_thread(segments, segement_table)
         else:
             multithread = False
             self._single_thread(url, file_path)
@@ -171,7 +171,7 @@ class Downloader:
                 self.time_spent = time.time() - start_time
                 return None
 
-            elif status == len(self._workers):
+            if status == len(self._workers):
                 if multithread:
                     combine_files(file_path, segments)
                 self.completed = True
@@ -226,7 +226,7 @@ class Downloader:
                 try:
                     _url = mirror_func() if i > 0 and callable(mirror_func) else url
                     if i > 0 and display:
-                        logging.info(f"Retrying... ({i}/{retries})")
+                        logging.info("Retrying... (%d/%d)", i, retries)
 
                     self.__init__(**self._kwargs)
                     result = self._downloader(
@@ -239,12 +239,13 @@ class Downloader:
                     time.sleep(3)
 
                 except Exception as e:
-                    logging.error(f"({e.__class__.__name__}) [{e}]")
+                    logging.error("(%s) [%s]", e.__class__.__name__, e)
 
                 finally:
                     self._pool.shutdown()
 
             self.failed = True
+            return None
 
         ex = ThreadPoolExecutor(max_workers=1)
         future = AutoShutdownFuture(ex.submit(download), ex)

@@ -307,7 +307,7 @@ The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object
 
 ##### Methods
 
-- `result(timeout=None)`: Retrieves the result of the Future object and shuts down the executor. Returns the result of the Future object.
+- `result(timeout=None)`: Retrieves the result of the Future object and shuts down the executor. If the download was successful, it returns a `FileValidator` object; otherwise, it returns `None`.
 
 ## License
 

@@ -11,14 +11,14 @@ from reprint import output
 from .utls import (
     AutoShutdownFuture,
     FileValidator,
-    Multidown,
-    Simpledown,
     combine_files,
     create_segment_table,
     get_filepath,
     seconds_to_hms,
     to_mb,
 )
+
+from .downloader import Multidown, Simpledown
 
 logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 
@@ -40,7 +40,7 @@ class Downloader:
     """
 
     def __init__(self, **kwargs):
-        self._pool = ThreadPoolExecutor(max_workers=2)
+        self._pool = None  # ThreadPoolExecutor, initialized in _downloader
         self._workers = []
         self._interrupt = Event()
         self._stop = False
@@ -58,26 +58,18 @@ class Downloader:
         self.failed = False
         self.completed = False
 
-    def _display(self, multithread, interval):
-        download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
-        with output(initial_len=2, interval=interval) as dynamic_print:
-            while True:
-                if self.size:
-                    progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}%"
-                    progress_stats = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
-                    dynamic_print[0] = progress_bar
-                    dynamic_print[1] = progress_stats
-                else:
-                    download_stats = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s"
-                    dynamic_print[0] = "Downloading..."
-                    dynamic_print[1] = download_stats
-
-                if self._interrupt.is_set() or self.completed:
-                    break
-
-                time.sleep(interval)
-
-        print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
+    def _display(self, dynamic_print, download_mode):
+        if self.size:
+            progress_bar = (
+                f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}%"
+            )
+            progress_stats = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
+            dynamic_print[0] = progress_bar
+            dynamic_print[1] = progress_stats
+        else:
+            download_stats = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s"
+            dynamic_print[0] = "Downloading..."
+            dynamic_print[1] = download_stats
 
     def _calc_values(self, recent_queue, interval):
         self.current_size = sum(worker.curr for worker in self._workers)
@@ -131,54 +123,61 @@ class Downloader:
 
         return response.headers
 
-    def _downloader(self, url, file_path, segments, display, multithread, etag):
-        start_time = time.time()
-
+    def _get_info(self, url, file_path, multithread, etag):
         header = self._get_header(url)
         file_path = get_filepath(url, header, file_path)
 
         if size := int(header.get("content-length", 0)):
             self.size = size
 
-        if self.size and header.get("accept-ranges") and multithread:
-            if etag := header.get("etag", not etag):
-                etag = etag.strip('"')
+        if etag := header.get("etag", not etag):  # since we check truthiness of etag
+            etag = etag.strip('"')
 
-            segement_table = create_segment_table(
+        if not self.size or not header.get("accept-ranges"):
+            multithread = False
+
+        return file_path, multithread, etag
+
+    def _downloader(self, url, file_path, segments, display, multithread, etag):
+        start_time = time.time()
+
+        file_path, multithread, etag = self._get_info(url, file_path, multithread, etag)
+
+        if multithread:
+            segment_table = create_segment_table(
                 url, file_path, segments, self.size, etag
             )
-            segments = segement_table["segments"]
-
-            self._pool.shutdown()
-            self._pool = ThreadPoolExecutor(max_workers=segments + 1)
-
-            self._multi_thread(segments, segement_table)
+            segments = segment_table["segments"]
+            self._pool = ThreadPoolExecutor(max_workers=segments)
+            self._multi_thread(segments, segment_table)
         else:
-            multithread = False
+            self._pool = ThreadPoolExecutor(max_workers=1)
             self._single_thread(url, file_path)
 
         interval = 0.15
         recent_queue = deque([0] * 12, maxlen=12)
+        download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
 
-        if display:
-            self._pool.submit(self._display, multithread, interval)
+        with output(initial_len=2, interval=interval) as dynamic_print:
+            while True:
+                status = sum(worker.completed for worker in self._workers)
+                self._calc_values(recent_queue, interval)
 
-        while True:
-            status = sum(worker.completed for worker in self._workers)
-            self._calc_values(recent_queue, interval)
+                if display:
+                    self._display(dynamic_print, download_mode)
 
-            if self._interrupt.is_set():
-                self.time_spent = time.time() - start_time
-                return None
+                if self._interrupt.is_set():
+                    self.time_spent = time.time() - start_time
+                    return None
 
-            if status == len(self._workers):
-                if multithread:
-                    combine_files(file_path, segments)
-                self.completed = True
-                self.time_spent = time.time() - start_time
-                return FileValidator(file_path)
+                if status == len(self._workers):
+                    if multithread:
+                        combine_files(file_path, segments)
+                    self.completed = True
+                    self.time_spent = time.time() - start_time
+                    return FileValidator(file_path)
 
-            time.sleep(interval)
+                time.sleep(interval)
 
     def stop(self) -> None:
         """Stop the download process."""
@@ -232,6 +231,8 @@ class Downloader:
                     )
 
                     if self._stop or self.completed:
+                        if display:
+                            print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
                         return result
 
                     time.sleep(3)

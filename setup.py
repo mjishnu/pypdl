@@ -9,7 +9,7 @@ setup(
     name="pypdl",
     version=VERSION,
     author="m-jishnu",
-    author_email="<jishnum499@gmail.com>",
+    author_email="<mjishnu@skiff.com>",
     description=DESCRIPTION,
     long_description_content_type="text/markdown",
     long_description=LONG_DESCRIPTION,

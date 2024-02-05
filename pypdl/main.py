@@ -8,6 +8,7 @@ from typing import Callable, Optional, Union
 import requests
 from reprint import output
 
+from .downloader import Multidown, Simpledown
 from .utls import (
     AutoShutdownFuture,
     FileValidator,
@@ -17,8 +18,6 @@ from .utls import (
     seconds_to_hms,
     to_mb,
 )
-
-from .downloader import Multidown, Simpledown
 
 logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 

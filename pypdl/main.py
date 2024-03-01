@@ -240,7 +240,8 @@ class Downloader:
                     logging.error("(%s) [%s]", e.__class__.__name__, e)
 
                 finally:
-                    self._pool.shutdown()
+                    if self._pool:
+                        self._pool.shutdown()
 
             self.failed = True
             return None

@@ -129,7 +129,7 @@ while dl.progress != 70:
   print(dl.progress)
 
 # stop the download process
-d.stop() 
+dl.stop() 
 
 #do something
 #...

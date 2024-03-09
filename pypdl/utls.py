@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Dict, Union
 from urllib.parse import unquote, urlparse
 
-
 MEGABYTE = 1048576
 BLOCKSIZE = 4096
 BLOCKS = 1024
@@ -37,6 +36,7 @@ def get_filepath(url: str, headers: Dict, file_path: str) -> str:
         if file_path.is_dir():
             return str(file_path / filename)
         return str(file_path)
+
     return filename
 
 
@@ -48,7 +48,7 @@ def create_segment_table(
 
     if progress_file.exists():
         progress = json.loads(progress_file.read_text())
-        if etag is True or progress["url"] == url and progress["etag"] == etag:
+        if etag is True or (progress["url"] == url and progress["etag"] == etag):
             segments = progress["segments"]
 
     progress_file.write_text(
@@ -64,15 +64,16 @@ def create_segment_table(
     for segment in range(segments):
         start = partition_size * segment
         end = partition_size * (segment + 1) - 1
+
         if segment == segments - 1:
             end += add_bytes
-        segment_size = end - start + 1  # since range is inclusive
 
+        segment_size = end - start + 1  # since range is inclusive
         dic[segment] = {
             "start": start,
             "end": end,
             "segment_size": segment_size,
-            "segment_path": f"{file_path }.{segment}",
+            "segment_path": f"{file_path}.{segment}",
         }
 
     return dic
@@ -90,6 +91,7 @@ def combine_files(file_path: str, segments: int) -> None:
                         dest.write(chunk)
                     else:
                         break
+
             Path(segment_file).unlink()
 
     progress_file = Path(f"{file_path}.json")

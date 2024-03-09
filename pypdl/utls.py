@@ -44,15 +44,12 @@ def create_segment_table(
     url: str, file_path: str, segments: str, size: int, etag: Union[str, bool]
 ) -> Dict:
     """Create a segment table for multi-threaded download."""
-    segments = 5 if (segments > 5) and (to_mb(size) < 50) else segments
     progress_file = Path(file_path + ".json")
 
-    try:
+    if progress_file.exists():
         progress = json.loads(progress_file.read_text())
-        if etag and progress["url"] == url and progress["etag"] == etag:
+        if etag is True or progress["url"] == url and progress["etag"] == etag:
             segments = progress["segments"]
-    except Exception:
-        pass
 
     progress_file.write_text(
         json.dumps(
@@ -62,14 +59,14 @@ def create_segment_table(
     )
 
     dic = {"url": url, "segments": segments}
-    partition_size = size / segments
+    partition_size, add_bytes = divmod(size, segments)
+
     for segment in range(segments):
-        start = int(partition_size * segment)
-        end = int(partition_size * (segment + 1))
-        segment_size = end - start
-        if segment != (segments - 1):
-            end -= 1  # [0-100, 100-200] -> [0-99, 100-200]
-        # No segment_size+=1 for last setgment since final byte is end byte
+        start = partition_size * segment
+        end = partition_size * (segment + 1) - 1
+        if segment == segments - 1:
+            end += add_bytes
+        segment_size = end - start + 1  # since range is inclusive
 
         dic[segment] = {
             "start": start,

@@ -311,7 +311,7 @@ The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object
 
 ## License
 
-pypdl is licensed under the MIT License. See the [LICENSE](https://github.com/m-jishnu/pypdl/blob/main/LICENSE) file for more details.
+pypdl is licensed under the MIT License. See the [LICENSE](https://github.com/mjishnu/pypdl/blob/main/LICENSE) file for more details.
 
 ## Contribution
 
@@ -319,4 +319,4 @@ Contributions to pypdl are always welcome. If you want to contribute to this pro
 
 ## Contact
 
-If you have any questions, issues, or feedback about pypdl, please open an issue on the [GitHub repository](https://github.com/m-jishnu/pypdl).
+If you have any questions, issues, or feedback about pypdl, please open an issue on the [GitHub repository](https://github.com/mjishnu/pypdl).

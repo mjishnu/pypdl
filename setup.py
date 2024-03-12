@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 DESCRIPTION = "A concurrent python download manager"
 with open("README.md", "r") as f:
     LONG_DESCRIPTION = f.read()
@@ -8,12 +8,12 @@ with open("README.md", "r") as f:
 setup(
     name="pypdl",
     version=VERSION,
-    author="m-jishnu",
+    author="mjishnu",
     author_email="<mjishnu@skiff.com>",
     description=DESCRIPTION,
     long_description_content_type="text/markdown",
     long_description=LONG_DESCRIPTION,
-    url="https://github.com/m-jishnu/pypdl",
+    url="https://github.com/mjishnu/pypdl",
     license="MIT",
     classifiers={
         "Development Status :: 5 - Production/Stable",

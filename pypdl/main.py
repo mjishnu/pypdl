@@ -112,15 +112,19 @@ class Downloader:
     def _get_header(self, url):
         kwargs = self._kwargs.copy()
         kwargs.pop("params", None)
-        response = requests.head(url, **kwargs)
 
-        if response.status_code != 200:
-            self._interrupt.set()
-            raise ConnectionError(
-                f"Server Returned: {response.reason}({response.status_code}), Invalid URL"
-            )
+        with requests.head(url, **kwargs) as response:
+            if response.status_code == 200:
+                return response.headers
 
-        return response.headers
+        with requests.get(url, stream=True, **self._kwargs) as response:
+            if response.status_code == 200:
+                return response.headers
+
+        self._interrupt.set()
+        raise ConnectionError(
+            f"Server Returned: {response.reason}({response.status_code}), Invalid URL"
+        )
 
     def _get_info(self, url, file_path, multithread, etag):
         header = self._get_header(url)

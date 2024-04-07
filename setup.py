@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 DESCRIPTION = "A concurrent python download manager"
 with open("README.md", "r") as f:
     LONG_DESCRIPTION = f.read()
@@ -22,7 +22,7 @@ setup(
         "Operating System :: OS Independent",
     },
     packages=find_packages(),
-    install_requires=["requests", "reprint"],
+    install_requires=["requests"],
     keywords=[
         "python",
         "downloader",

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import sys
 import time
 from concurrent.futures import Executor, Future
 from pathlib import Path
@@ -127,3 +128,20 @@ class AutoShutdownFuture:
         result = self.future.result(timeout)
         self.executor.shutdown()
         return result
+
+
+class ScreenCleaner:
+    """A context manager to clear the screen and hide cursor."""
+
+    def __init__(self, display):
+        self.display = display
+
+    def __enter__(self):
+        if self.display:
+            sys.stdout.write("\033c")  # Clear screen
+            sys.stdout.write("\x1b[?25l")  # Hide cursor
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.display:
+            sys.stdout.write("\x1b[?25h")  # Show cursor

@@ -1,4 +1,5 @@
 import logging
+import sys
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -6,12 +7,12 @@ from threading import Event
 from typing import Callable, Optional, Union
 
 import requests
-from reprint import output
 
 from .downloader import Multidown, Simpledown
 from .utls import (
     AutoShutdownFuture,
     FileValidator,
+    ScreenCleaner,
     combine_files,
     create_segment_table,
     get_filepath,
@@ -57,18 +58,19 @@ class Downloader:
         self.failed = False
         self.completed = False
 
-    def _display(self, dynamic_print, download_mode):
+    def _display(self, download_mode):
+        sys.stdout.write("\x1b[1A" * 2)  # Cursor up 2 lines
+
         if self.size:
-            progress_bar = (
-                f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}%"
-            )
-            progress_stats = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
-            dynamic_print[0] = progress_bar
-            dynamic_print[1] = progress_stats
+            progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
+            info = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
+            print(progress_bar + info)
         else:
-            download_stats = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s"
-            dynamic_print[0] = "Downloading..."
-            dynamic_print[1] = download_stats
+            download_stats = "Downloading... \n"
+            info = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s "
+            print(download_stats + info)
+
+        sys.stdout.flush()
 
     def _calc_values(self, recent_queue, interval):
         self.current_size = sum(worker.curr for worker in self._workers)
@@ -157,17 +159,17 @@ class Downloader:
             self._pool = ThreadPoolExecutor(max_workers=1)
             self._single_thread(url, file_path)
 
-        interval = 0.15
         recent_queue = deque([0] * 12, maxlen=12)
         download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
+        interval = 0.5
 
-        with output(initial_len=2, interval=interval) as dynamic_print:
+        with ScreenCleaner(display):
             while True:
                 status = sum(worker.completed for worker in self._workers)
                 self._calc_values(recent_queue, interval)
 
                 if display:
-                    self._display(dynamic_print, download_mode)
+                    self._display(download_mode)
 
                 if self._interrupt.is_set():
                     self.time_spent = time.time() - start_time

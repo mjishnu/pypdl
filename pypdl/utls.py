@@ -49,7 +49,11 @@ def create_segment_table(
 
     if progress_file.exists():
         progress = json.loads(progress_file.read_text())
-        if etag is True or (progress["url"] == url and progress["etag"] == etag):
+
+        if etag is True:
+            segments = progress["segments"]
+
+        elif progress["etag"] and (progress["url"] == url and progress["etag"] == etag):
             segments = progress["segments"]
 
     progress_file.write_text(

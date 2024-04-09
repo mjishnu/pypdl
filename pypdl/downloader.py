@@ -77,6 +77,7 @@ class Multidown(Basicdown):
 
     def worker(self) -> None:
         url = self.segement_table["url"]
+        overwrite = self.segement_table["overwrite"]
         segment_path = Path(self.segement_table[self.id]["segment_path"])
         start = self.segement_table[self.id]["start"]
         end = self.segement_table[self.id]["end"]
@@ -84,7 +85,7 @@ class Multidown(Basicdown):
 
         if segment_path.exists():
             downloaded_size = segment_path.stat().st_size
-            if downloaded_size > size:
+            if overwrite or downloaded_size > size:
                 segment_path.unlink()
             else:
                 self.curr = downloaded_size

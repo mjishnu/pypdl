@@ -46,15 +46,18 @@ def create_segment_table(
 ) -> Dict:
     """Create a segment table for multi-threaded download."""
     progress_file = Path(file_path + ".json")
+    overwrite = True
 
     if progress_file.exists():
         progress = json.loads(progress_file.read_text())
 
         if etag is True:
             segments = progress["segments"]
+            overwrite = False
 
         elif progress["etag"] and (progress["url"] == url and progress["etag"] == etag):
             segments = progress["segments"]
+            overwrite = False
 
     progress_file.write_text(
         json.dumps(
@@ -63,7 +66,7 @@ def create_segment_table(
         )
     )
 
-    dic = {"url": url, "segments": segments}
+    dic = {"url": url, "segments": segments, "overwrite": overwrite}
     partition_size, add_bytes = divmod(size, segments)
 
     for segment in range(segments):

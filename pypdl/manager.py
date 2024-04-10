@@ -3,6 +3,7 @@ import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
+from pathlib import Path
 
 import requests
 
@@ -23,10 +24,10 @@ class DownloadManager:
         self._pool = None  # ThreadPoolExecutor, initialized in _execute
         self._workers = []
         self._interrupt = Event()
+        self._stop = False
         self._kwargs = {"timeout": 10, "allow_redirects": True}  # request module kwargs
         self._kwargs.update(kwargs)
 
-        # public attributes
         self.size = None
         self.progress = 0
         self.speed = 0
@@ -34,6 +35,7 @@ class DownloadManager:
         self.current_size = 0
         self.eta = "99:59:59"
         self.remaining = None
+        self.active = False
         self.failed = False
         self.completed = False
 
@@ -124,10 +126,14 @@ class DownloadManager:
 
         return file_path, multithread, etag
 
-    def _execute(self, url, file_path, segments, display, multithread, etag):
+    def _execute(self, url, file_path, segments, display, multithread, etag, overwrite):
         start_time = time.time()
 
         file_path, multithread, etag = self._get_info(url, file_path, multithread, etag)
+
+        if not overwrite and Path(file_path).exists():
+            self.completed = True
+            return FileValidator(file_path)
 
         if multithread:
             segment_table = create_segment_table(

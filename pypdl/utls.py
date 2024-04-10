@@ -143,10 +143,13 @@ class ScreenCleaner:
     def __init__(self, display):
         self.display = display
 
-    def __enter__(self):
+    def clear(self):
         if self.display:
             sys.stdout.write("\033c")  # Clear screen
             sys.stdout.write("\x1b[?25l")  # Hide cursor
+
+    def __enter__(self):
+        self.clear()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

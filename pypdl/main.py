@@ -1,15 +1,11 @@
 import logging
+import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional, Union
 
 from manager import DownloadManager
-
-from utls import (
-    AutoShutdownFuture,
-    FileValidator,
-    seconds_to_hms,
-)
+from utls import AutoShutdownFuture, FileValidator, ScreenCleaner, seconds_to_hms, to_mb
 
 logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 
@@ -30,10 +26,6 @@ class Pypdl(DownloadManager):
         verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._stop = False
-
     def start(
         self,
         url: str,
@@ -45,6 +37,7 @@ class Pypdl(DownloadManager):
         retries: int = 0,
         mirror_func: Optional[Callable[[], str]] = None,
         etag: bool = True,
+        overwrite: bool = True,
     ) -> Union[AutoShutdownFuture, FileValidator, None]:
         """
         Start the download process.
@@ -60,6 +53,7 @@ class Pypdl(DownloadManager):
             retries (int, Optional): The number of times to retry the download if it fails. Default is 0.
             mirror_func (Callable[[], str], Optional): A function that returns a new download URL if the download fails. Default is None.
             etag (bool, Optional): Whether to validate the ETag before resuming downloads. Default is True.
+            overwrite (bool, Optional): Whether to overwrite the file if it already exists. Default is True.
 
         Returns:
             AutoShutdownFuture: If `block` is False.
@@ -68,6 +62,7 @@ class Pypdl(DownloadManager):
         """
 
         def download():
+            self.active = True
             for i in range(retries + 1):
                 try:
                     _url = mirror_func() if i > 0 and callable(mirror_func) else url
@@ -76,12 +71,13 @@ class Pypdl(DownloadManager):
 
                     self.__init__(**self._kwargs)
                     result = self._execute(
-                        _url, file_path, segments, display, multithread, etag
+                        _url, file_path, segments, display, multithread, etag, overwrite
                     )
 
                     if self._stop or self.completed:
                         if display:
                             print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
+                        self.active = False
                         return result
 
                     time.sleep(3)
@@ -94,6 +90,7 @@ class Pypdl(DownloadManager):
                         self._pool.shutdown()
 
             self.failed = True
+            self.active = False
             return None
 
         ex = ThreadPoolExecutor(max_workers=1)
@@ -110,3 +107,126 @@ class Pypdl(DownloadManager):
         self._interrupt.set()
         self._stop = True
         time.sleep(1)  # wait for threads
+
+
+class PypdlFactory:
+    def __init__(self, instances: int, **kwargs):
+        self._kwargs = kwargs
+        self._instances = [Pypdl(**self._kwargs) for _ in range(instances)]
+        self._stop = False
+        self._prog = None
+
+        self.downloaded = 0
+        self.progress = 0
+        self.speed = 0
+        self.time_spent = 0
+        self.current_size = 0
+        self.eta = "99:59:59"
+        self.completed = []
+        self.failed = []
+        self.remaining = []
+        self.active = False
+
+    def _calc_values(self, display):
+        def sum_attribute(instances, attribute):
+            return sum(getattr(instance, attribute) for instance in instances)
+
+        def average_attribute(instances, attribute, total):
+            return sum_attribute(instances, attribute) // total
+
+        with ScreenCleaner(display) as cleaner:
+            while self.remaining or not self._stop:
+                self.current_size = (
+                    sum_attribute(self._instances, "current_size") + self.downloaded
+                )
+                self.speed = average_attribute(
+                    self._instances, "speed", len(self._instances)
+                )
+                self.progress = average_attribute(
+                    self._instances,
+                    "progress",
+                    len(self._instances) + len(self.remaining),
+                )
+
+                if self.speed:
+                    self.eta = seconds_to_hms(
+                        (sum_attribute(self._instances, "remaining") // self.speed)
+                        * len(self._instances)
+                    )
+                else:
+                    self.eta = "99:59:59"
+
+                if display:
+                    self._display(cleaner)
+
+                time.sleep(0.5)
+
+    def _display(self, cleaner):
+        sys.stdout.write("\x1b[1A" * 2)  # Cursor up 2 lines
+        completed = len(self.completed)
+        total = (
+            completed + len(self.failed) + len(self.remaining) + len(self._instances)
+        )
+
+        if self._prog:
+            progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
+            info = f"Total: {completed}/{total}, Downloaded: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
+            print(progress_bar + info)
+        else:
+            download_stats = "Downloading... \n"
+            info = f"Total: {completed}/{total}, Downloaded: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s "
+            print(download_stats + info)
+
+        sys.stdout.flush()
+        prog = all(instance.size for instance in self._instances)
+        if self._prog != prog:
+            self._prog = prog
+            cleaner.clear()
+
+    def _execute(self, tasks):
+        start_time = time.time()
+        for instance, task in zip(self._instances, tasks):
+            url, kwargs = task
+            kwargs.update({"block": False, "display": False, "overwrite": False})
+            job = instance.start(url, **kwargs)
+            futures = {job.future: (job, instance, url)}
+
+        while self.remaining:
+            for future in as_completed(futures):
+                job, instance, curr_url = futures.pop(future)
+                result = job.result()  # shutdown executor
+
+                if instance.completed:
+                    self.downloaded += instance.size if instance.size else 0
+                    self.completed.append((curr_url, result))
+                elif instance.failed:
+                    self.failed.append(curr_url)
+
+                if self.remaining:
+                    new_url, kwargs = self.remaining.pop(0)
+                    kwargs.update(
+                        {"block": False, "display": False, "overwrite": False}
+                    )
+                    job = instance.start(new_url, **kwargs)
+                    futures[job.future] = (job, instance, url)
+
+        self.active = False
+        self.time_spent = time.time() - start_time
+        return self.completed
+
+    def start(self, tasks, display=True, block=True):
+        self.__init__(len(self._instances), **self._kwargs)
+        self.active = True
+        self.remaining = tasks[len(self._instances) :]
+
+        pool = ThreadPoolExecutor(max_workers=2)
+
+        future = AutoShutdownFuture(pool.submit(self._execute, tasks), pool)
+
+        if block:
+            self._calc_values(display)
+            print("Time elapsed: ", seconds_to_hms(self.time_spent))
+            result = future.result()
+            return result
+
+        return future

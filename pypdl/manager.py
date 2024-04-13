@@ -35,7 +35,6 @@ class DownloadManager:
         self.current_size = 0
         self.eta = "99:59:59"
         self.remaining = None
-        self.active = False
         self.failed = False
         self.completed = False
 
@@ -68,7 +67,7 @@ class DownloadManager:
             self.speed = (sum(diff) / len(diff)) / interval
 
         if self.size:
-            self.progress = int(100 * self.current_size / self.size)
+            self.progress = int((self.current_size / self.size) * 100)
             self.remaining = to_mb(self.size - self.current_size)
 
             if self.speed:

@@ -1,4 +1,3 @@
-import sys
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -7,8 +6,8 @@ from pathlib import Path
 
 import requests
 
-from downloader import Multidown, Simpledown
-from utls import (
+from .downloader import Multidown, Simpledown
+from .utls import (
     FileValidator,
     ScreenCleaner,
     combine_files,
@@ -16,6 +15,7 @@ from utls import (
     get_filepath,
     seconds_to_hms,
     to_mb,
+    cursor_up,
 )
 
 
@@ -37,20 +37,6 @@ class DownloadManager:
         self.remaining = None
         self.failed = False
         self.completed = False
-
-    def _display(self, download_mode):
-        sys.stdout.write("\x1b[1A" * 2)  # Cursor up 2 lines
-
-        if self.size:
-            progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
-            info = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
-            print(progress_bar + info)
-        else:
-            download_stats = "Downloading... \n"
-            info = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s "
-            print(download_stats + info)
-
-        sys.stdout.flush()
 
     def _calc_values(self, recent_queue, interval):
         self.current_size = sum(worker.curr for worker in self._workers)
@@ -74,6 +60,18 @@ class DownloadManager:
                 self.eta = seconds_to_hms(self.remaining / self.speed)
             else:
                 self.eta = "99:59:59"
+
+    def _display(self, download_mode):
+        cursor_up()
+
+        if self.size:
+            progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
+            info = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
+            print(progress_bar + info)
+        else:
+            download_stats = "Downloading... \n"
+            info = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s "
+            print(download_stats + info)
 
     def _single_thread(self, url, file_path):
         sd = Simpledown(url, file_path, self._interrupt, **self._kwargs)

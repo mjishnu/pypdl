@@ -22,6 +22,11 @@ def seconds_to_hms(sec: float) -> str:
     return time.strftime("%H:%M:%S", time_struct)
 
 
+def cursor_up() -> None:
+    sys.stdout.write("\x1b[1A" * 2)  # Move cursor up two lines
+    sys.stdout.flush()
+
+
 def get_filepath(url: str, headers: Dict, file_path: str) -> str:
     content_disposition = headers.get("Content-Disposition", None)
 
@@ -140,16 +145,16 @@ class AutoShutdownFuture:
 class ScreenCleaner:
     """A context manager to clear the screen and hide cursor."""
 
-    def __init__(self, display):
+    def __init__(self, display: bool):
         self.display = display
 
-    def clear(self):
-        if self.display:
-            sys.stdout.write("\033c")  # Clear screen
-            sys.stdout.write("\x1b[?25l")  # Hide cursor
+    def clear(self) -> None:
+        sys.stdout.write("\033c")  # Clear screen
+        sys.stdout.write("\x1b[?25l")  # Hide cursor
 
     def __enter__(self):
-        self.clear()
+        if self.display:
+            self.clear()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

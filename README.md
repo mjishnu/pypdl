@@ -31,18 +31,18 @@ pip install pypdl
 
 ### Basic Usage
 
-To download a file using the pypdl, simply create a new `Downloader` object and call its `start` method, passing in the URL of the file to be downloaded:
+To download a file using the pypdl, simply create a new `Pypdl` object and call its `start` method, passing in the URL of the file to be downloaded:
 
 ```py
-from pypdl import Downloader
+from pypdl import Pypdl
 
-dl = Downloader()
+dl = Pypdl()
 dl.start('http://example.com/file.txt')
 ```
 
 ### Advanced Usage
 
-The `Downloader` object provides additional options for advanced usage:
+The `Pypdl` object provides additional options for advanced usage:
 
 ```py
 dl.start(
@@ -75,7 +75,7 @@ Each option is explained below:
 Here is an example that demonstrates how to use pypdl library to download a file using headers, proxies and authentication:
 
 ```py
-from pypdl import Downloader
+from pypdl import Pypdl
 
 def main():
     # Using headers
@@ -88,8 +88,8 @@ def main():
     # Using authentication
     auth = ("user","pass")
 
-    # create a new downloader object
-    dl = Downloader(headers=headers, proxies=proxies, auth=auth)
+    # create a new pypdl object
+    dl = Pypdl(headers=headers, proxies=proxies, auth=auth)
 
     # start the download
     dl.start(
@@ -113,11 +113,10 @@ This example downloads a file from the internet using 10 threads and displays th
 Another example of implementing pause resume functionality and printing the progress to console:
 
 ```py
-from pypdl import Downloader
-from threading import Event
+from pypdl import Pypdl
 
-# create a downloader object
-dl = Downloader()
+# create a pypdl object
+dl = Pypdl()
 
 # start the download process
 # block=False so we can print the progress
@@ -148,10 +147,10 @@ This example we start the download process and print the progress to console. We
 Another example of using hash validation:
 
 ```py
-from pypdl import Downloader
+from pypdl import Pypdl
 
-# create a downloader object
-dl = Downloader()
+# create a pypdl object
+dl = Pypdl()
 
 # if block = True --> returns a FileValidator object
 file = dl.start('https://example.com/file.zip', block=True) 
@@ -175,12 +174,53 @@ if dl.completed:
   else:
       print('Hash is invalid')
 ```
+An example of using `PypdlFactory` to download multiple files concurrently:
 
+```py
+from pypdl import PypdlFactory
+
+proxies = {"http": "http://10.10.1.10:3128", "https": "https://10.10.1.10:1080"}
+
+# create a PypdlFactory object
+factory = PypdlFactory(instances=5, proxies=proxies)
+
+# list of tasks to be downloaded
+tasks = [
+    ('https://example.com/file1.zip', {'file_path': 'file1.zip'}),
+    ('https://example.com/file2.zip', {'file_path': 'file2.zip'}),
+    ('https://example.com/file3.zip', {'file_path': 'file3.zip'}),
+    ('https://example.com/file4.zip', {'file_path': 'file4.zip'}),
+    ('https://example.com/file5.zip', {'file_path': 'file5.zip'}),
+]
+
+# start the download process
+results = factory.start(tasks, display=True, block=False)
+
+# do something
+# ...
+
+# stop the download process
+factory.stop()
+
+# do something
+# ...
+
+# restart the download process
+results = factory.start(tasks, display=True, block=True)
+
+# print the results
+for url, result in results:
+    # validate hash
+    if result.validate_hash(correct_hash,'sha256'):
+        print(f'{url} - Hash is valid')
+    else:
+        print(f'{url} - Hash is invalid')
+```
 ## API Reference
 
-### `Downloader()`
+### `Pypdl()`
 
-The `Downloader` class represents a file downloader that can download a file from a given URL to a specified file path. The class supports both single-threaded and multi-threaded downloads and many other features like retry download incase of failure and option to continue downloading using a different url if necessary, pause/resume functionality, progress tracking etc.
+The `Pypdl` class represents a file downloader that can download a file from a given URL to a specified file path. The class supports both single-threaded and multi-threaded downloads and many other features like retry download incase of failure and option to continue downloading using a different url if necessary, pause/resume functionality, progress tracking etc.
 
 #### Keyword Arguments
 
@@ -229,6 +269,51 @@ The `Downloader` class represents a file downloader that can download a file fro
     - `None`: If `block` is `True` and the download fails.
 
 - `stop()`: Stops the download process.
+
+### `PypdlFactory()`
+
+The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. It allows for concurrent downloads and provides progress tracking across all active downloads.
+
+#### Keyword Arguments
+
+- `params`: (dict, Optional) A dictionary, list of tuples or bytes to send as a query string. Default is None.
+- `allow_redirects`: (bool, Optional) A Boolean to enable/disable redirection. Default is True.
+- `auth`: (tuple, Optional) A tuple to enable a certain HTTP authentication. Default is None.
+- `cert`: (str or tuple, Optional) A String or Tuple specifying a cert file or key. Default is None.
+- `cookies`: (dict, Optional) A dictionary of cookies to send to the specified url. Default is None.
+- `headers`: (dict, Optional) A dictionary of HTTP headers to send to the specified url. Default is None.
+- `proxies`: (dict, Optional) A dictionary of the protocol to the proxy url. Default is None.
+- `timeout`: (number or tuple, Optional) A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 10 seconds.
+- `verify`: (bool or str, Optional) A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
+
+#### Attributes
+
+- `progress`: The overall download progress percentage across all active downloads.
+- `speed`: The average download speed across all active downloads, in MB/s.
+- `time_spent`: The total time spent downloading across all active downloads, in seconds.
+- `current_size`: The total amount of data downloaded so far across all active downloads, in bytes.
+- `total`: The total number of download tasks.
+- `eta`: The estimated time remaining for all active downloads to complete, in the format "HH:MM:SS".
+- `completed`: A list of tuples where each tuple contains the URL of the download and the result of the download.
+- `failed`: A list of URLs for which the download failed.
+- `remaining`: A list of remaining download tasks.
+
+#### Methods
+
+- `start(tasks, display=True, block=True)`: Starts the download process for multiple tasks.
+
+    ##### Parameters
+
+    - `tasks`: (list) A list of tasks to be downloaded. Each task is a tuple where the first element is the URL and the second element is an optional dictionary with keyword arguments for `Pypdl` start method.
+    - `display`: (bool, Optional) Whether to display download progress and other messages. Default is True.
+    - `block`: (bool, Optional) Whether to block the function until all downloads are complete. Default is True.
+
+    ##### Returns
+
+    - `AutoShutdownFuture`: If `block` is `False`. This is a future object that can be used to check the status of the downloads.
+    - `list`: If `block` is `True`. This is a list of tuples where each tuple contains the URL of the download and the result of the download.
+
+- `stop()`: Stops all active downloads.
 
 ### Helper Classes
 

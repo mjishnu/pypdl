@@ -1,14 +1,25 @@
 import logging
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional, Union
-from threading import Event
 
-from manager import DownloadManager
-from utls import AutoShutdownFuture, FileValidator, ScreenCleaner, seconds_to_hms, to_mb
+from .manager import DownloadManager
+from .utls import (
+    AutoShutdownFuture,
+    FileValidator,
+    ScreenCleaner,
+    cursor_up,
+    seconds_to_hms,
+    to_mb,
+)
 
-logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
+handler = logging.FileHandler("pypdl.log", mode="a", delay=True)
+handler.setFormatter(
+    logging.Formatter(
+        "%(asctime)s - %(levelname)s: %(message)s", datefmt="%d-%m-%y %H:%M:%S"
+    )
+)
+logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 
 class Pypdl(DownloadManager):
@@ -108,13 +119,29 @@ class Pypdl(DownloadManager):
 
 
 class PypdlFactory:
-    def __init__(self, instances: int, **kwargs):
-        self._kwargs = kwargs
-        self._instances = [Pypdl(**self._kwargs) for _ in range(instances)]
+    """
+    A factory class for managing multiple instances of the Pypdl downloader.
+
+    Keyword Arguments:
+        params (dict, optional): A dictionary, list of tuples or bytes to send as a query string. Default is None.
+        allow_redirects (bool, optional): A Boolean to enable/disable redirection. Default is True.
+        auth (tuple, optional): A tuple to enable a certain HTTP authentication. Default is None.
+        cert (str or tuple, optional): A String or Tuple specifying a cert file or key. Default is None.
+        cookies (dict, optional): A dictionary of cookies to send to the specified url. Default is None.
+        headers (dict, optional): A dictionary of HTTP headers to send to the specified url. Default is None.
+        proxies (dict, optional): A dictionary of the protocol to the proxy url. Default is None.
+        timeout (number or tuple, optional): A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 10 seconds.
+        verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
+    """
+
+    def __init__(self, instances: int = 2, **kwargs):
+        if not hasattr(self, "_instances"):
+            self._instances = [Pypdl(**kwargs) for _ in range(instances)]
         self._stop = False
+        self._prog = True
+        self._pool = None
         self._completed_data = 0
         self._completed_prog = 0
-        self._clear = Event()
 
         self.progress = 0
         self.speed = 0
@@ -126,22 +153,6 @@ class PypdlFactory:
         self.failed = []
         self.remaining = []
 
-    def _compute(self, display):
-        with ScreenCleaner(display) as cleaner:
-            while len(self.completed) + len(self.failed) < self.total:
-                self._calc_values()
-
-                if display:
-                    self._display(cleaner)
-
-                if self._stop:
-                    break
-
-                time.sleep(0.5)
-            self._calc_values()
-            if display:
-                self._display(cleaner)
-
     def _calc_values(self):
         def sum_attribute(instances, attribute):
             return sum(getattr(instance, attribute) for instance in instances)
@@ -149,14 +160,18 @@ class PypdlFactory:
         def average_attribute(instances, attribute, total):
             return sum_attribute(instances, attribute) // total
 
-        self.current_size = (
-            sum_attribute(self._instances, "current_size") + self._completed_data
-        )
         self.speed = average_attribute(self._instances, "speed", len(self._instances))
-        self.progress = (
-            average_attribute(self._instances, "progress", self.total)
-            + self._completed_prog
-        )
+        if self._completed_prog < 100:
+            self.progress = (
+                average_attribute(self._instances, "progress", self.total)
+                + self._completed_prog
+            )
+            self.current_size = (
+                sum_attribute(self._instances, "current_size") + self._completed_data
+            )
+        else:
+            self.progress = self._completed_prog
+            self.current_size = self._completed_data
 
         if self.speed:
             self.eta = seconds_to_hms(
@@ -165,84 +180,117 @@ class PypdlFactory:
         else:
             self.eta = "99:59:59"
 
-    def _display(self, cleaner):
-        sys.stdout.write("\x1b[1A" * 2)  # Cursor up 2 lines
+    def _display(self):
+        cursor_up()
         completed = len(self.completed)
-
-        if self._clear.is_set():
-            cleaner.clear()
-            self._clear.clear()
-
-        prog = all(instance.size for instance in self._instances)
+        prog = (
+            all(instance.size for instance in self._instances) if self._prog else False
+        )
 
         if prog:
             progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
             info = f"Total: {completed}/{self.total}, Downloaded: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
             print(progress_bar + info)
         else:
-            download_stats = "Downloading... \n"
+            download_stats = f"Downloading...{" " * 95}\n"
             info = f"Total: {completed}/{self.total}, Downloaded: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s "
             print(download_stats + info)
 
-        sys.stdout.flush()
+    def _compute(self, display):
+        with ScreenCleaner(display):
+            while len(self.completed) + len(self.failed) < self.total:
+                self._calc_values()
+                if display:
+                    self._display()
+                if self._stop:
+                    break
+                time.sleep(0.5)
+
+            self._calc_values()
+            if display:
+                self._display()
+                print("Time elapsed: ", seconds_to_hms(self.time_spent))
+
+    def _add_future(self, instance, task, futures):
+        url, *kwargs = task
+        kwargs = kwargs[0] if kwargs else {}
+        kwargs.update({"block": False, "display": False, "overwrite": False})
+        job = instance.start(url, **kwargs)
+        futures[job.future] = (job, instance, url)
 
     def _execute(self, tasks):
         start_time = time.time()
         self.total = len(tasks)
+        self.remaining = tasks[len(self._instances) :]
+        futures = {}
 
         for instance, task in zip(self._instances, tasks):
-            url, kwargs = task
-            kwargs.update({"block": False, "display": False, "overwrite": False})
-            job = instance.start(url, **kwargs)
-            futures = {job.future: (job, instance, url)}
-            self.remaining = tasks[len(self._instances) :]
+            self._add_future(instance, task, futures)
 
         while len(self.completed) + len(self.failed) < self.total:
+            if self._stop:
+                break
+
             for future in as_completed(futures):
                 job, instance, curr_url = futures.pop(future)
                 result = job.result()  # shutdown executor
-                self._clear.set()
 
                 if instance.completed:
-                    self._completed_data += instance.size if instance.size else 0
+                    if instance.size:
+                        self._completed_data += instance.size
+                    else:
+                        self._prog = False
                     self._completed_prog += int((1 / self.total) * 100)
                     self.completed.append((curr_url, result))
                 elif instance.failed:
                     self.failed.append(curr_url)
+                    logging.error("Download failed: %s", curr_url)
                 else:
-                    break
+                    continue
 
                 if self.remaining:
-                    new_url, kwargs = self.remaining.pop(0)
-                    kwargs.update(
-                        {"block": False, "display": False, "overwrite": False}
-                    )
-                    job = instance.start(new_url, **kwargs)
-                    futures[job.future] = (job, instance, url)
+                    self._add_future(instance, self.remaining.pop(0), futures)
 
         self.time_spent = time.time() - start_time
-        print("Time elapsed: ", seconds_to_hms(self.time_spent))
         return self.completed
 
-    def start(self, tasks, display=True, block=True):
-        self.__init__(len(self._instances), **self._kwargs)
+    def start(
+        self, tasks: list, display: bool = True, block: bool = True
+    ) -> Union[AutoShutdownFuture, list]:
+        """
+        Start the download process for multiple tasks.
+
+        Parameters:
+            tasks (list): A list of tasks to be downloaded.
+                Each task is a tuple where the 1st element is the URL and the 2nd element is an optional dict with kwargs for pypdl start method.
+            display (bool, Optional): Whether to display download progress and other messages. Default is True.
+            block (bool, Optional): Whether to block the function until all downloads are complete. Default is True.
+
+        Returns:
+            AutoShutdownFuture: If `block` is False. This is a future object that can be used to check the status of the downloads.
+            list: If `block` is True. This is a list of tuples where each tuple contains the URL of the download and the result of the download.
+        """
+
+        self.__init__()
 
         if block:
-            pool = ThreadPoolExecutor(max_workers=1)
+            self._pool = ThreadPoolExecutor(max_workers=1)
         else:
-            pool = ThreadPoolExecutor(max_workers=2)
+            self._pool = ThreadPoolExecutor(max_workers=2)
 
-        future = AutoShutdownFuture(pool.submit(self._execute, tasks), pool)
+        future = AutoShutdownFuture(self._pool.submit(self._execute, tasks), self._pool)
 
         if block:
             self._compute(display)
             result = future.result()
             return result
 
-        pool.submit(self._compute, display)
+        self._pool.submit(self._compute, display)
         return future
 
     def stop(self):
-        self.stop = True
+        """Stops all active downloads."""
+        self._stop = True
         for instance in self._instances:
             instance.stop()
+        self._pool.shutdown()

@@ -26,10 +26,16 @@ setup(
     keywords=[
         "python",
         "downloader",
+        "multi-threaded-downloader",
         "concurrent-downloader",
-        "parrel-downloader",
-        "download manager",
+        "parallel-downloader",
+        "download-manager",
         "fast-downloader",
+        "download-accelerator",
+        "download-optimizer",
+        "download-utility",
+        "download-tool",
+        "download-automation",
     ],
     python_requires=">=3.8",
 )

@@ -140,7 +140,7 @@ class PypdlFactory:
         self._stop = False
         self._prog = True
         self._pool = None
-        self._completed_data = 0
+        self._completed_size = 0
         self._completed_prog = 0
 
         self.progress = 0
@@ -161,17 +161,14 @@ class PypdlFactory:
             return sum_attribute(instances, attribute) // total
 
         self.speed = average_attribute(self._instances, "speed", len(self._instances))
-        if self._completed_prog < 100:
-            self.progress = (
-                average_attribute(self._instances, "progress", self.total)
-                + self._completed_prog
-            )
-            self.current_size = (
-                sum_attribute(self._instances, "current_size") + self._completed_data
-            )
-        else:
-            self.progress = self._completed_prog
-            self.current_size = self._completed_data
+
+        self.progress = (
+            average_attribute(self._instances, "progress", self.total)
+            + self._completed_prog
+        )
+        self.current_size = (
+            sum_attribute(self._instances, "current_size") + self._completed_size
+        )
 
         if self.speed:
             self.eta = seconds_to_hms(
@@ -206,7 +203,8 @@ class PypdlFactory:
                     break
                 time.sleep(0.5)
 
-            self._calc_values()
+            self.progress = self._completed_prog
+            self.current_size = self._completed_size
             if display:
                 self._display()
                 print("Time elapsed: ", seconds_to_hms(self.time_spent))
@@ -237,7 +235,7 @@ class PypdlFactory:
 
                 if instance.completed:
                     if instance.size:
-                        self._completed_data += instance.size
+                        self._completed_size += instance.size
                     else:
                         self._prog = False
                     self._completed_prog += int((1 / self.total) * 100)

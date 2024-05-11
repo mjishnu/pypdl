@@ -3,11 +3,12 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from pathlib import Path
+import asyncio
+import logging
+import aiohttp
 
-import requests
-
-from .downloader import Multidown, Simpledown
-from .utls import (
+from downloader import Multidown, Simpledown
+from utls import (
     FileValidator,
     ScreenCleaner,
     combine_files,
@@ -21,11 +22,14 @@ from .utls import (
 
 class DownloadManager:
     def __init__(self, **kwargs):
-        self._pool = None  # ThreadPoolExecutor, initialized in _execute
+        self._pool = ThreadPoolExecutor(max_workers=5)
         self._workers = []
         self._interrupt = Event()
         self._stop = False
-        self._kwargs = {"timeout": 10, "allow_redirects": True}  # request module kwargs
+        self._kwargs = {
+            "timeout": 100,
+            "allow_redirects": True,
+        }  # request module kwargs
         self._kwargs.update(kwargs)
 
         self.size = None
@@ -73,43 +77,50 @@ class DownloadManager:
             info = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s "
             print(download_stats + info)
 
-    def _single_thread(self, url, file_path):
-        sd = Simpledown(url, file_path, self._interrupt, **self._kwargs)
+    async def _single_thread(self, url, file_path):
+        sd = Simpledown(self._interrupt)
         self._workers.append(sd)
-        self._pool.submit(sd.worker)
+        async with aiohttp.ClientSession() as session:
+            await sd.worker(url, file_path, session)
 
-    def _multi_thread(self, segments, segement_table):
+    async def _multi_thread(self, segments, segement_table):
+        tasks = []
+        session = aiohttp.ClientSession()
         for segment in range(segments):
             md = Multidown(
-                segement_table,
                 segment,
                 self._interrupt,
                 **self._kwargs,
             )
             self._workers.append(md)
-            self._pool.submit(md.worker)
+            tasks.append(asyncio.create_task(md.worker(segement_table, session)))
+        try:
+            await asyncio.gather(*tasks)
+        except Exception as e:
+            logging.error("(%s) [%s]", e.__class__.__name__, e)
+        finally:
+            await session.close()
 
-    def _get_header(self, url):
+    async def _get_header(self, url):
         kwargs = self._kwargs.copy()
         kwargs.pop("params", None)
 
-        with requests.head(url, **kwargs) as response:
-            if response.status_code == 200:
-                return response.headers
+        async with aiohttp.ClientSession() as session:
+            async with session.head(url, **kwargs) as response:
+                if response.status == 200:
+                    return response.headers
 
-        with requests.get(url, stream=True, **self._kwargs) as response:
-            if response.status_code == 200:
-                return response.headers
-
+            async with session.get(url, stream=True, **self._kwargs) as response:
+                if response.status == 200:
+                    return response.headers
         self._interrupt.set()
         raise ConnectionError(
             f"Server Returned: {response.reason}({response.status_code}), Invalid URL"
         )
 
-    def _get_info(self, url, file_path, multithread, etag):
-        header = self._get_header(url)
+    async def _get_info(self, url, file_path, multithread, etag):
+        header = await self._get_header(url)
         file_path = get_filepath(url, header, file_path)
-
         if size := int(header.get("content-length", 0)):
             self.size = size
 
@@ -126,7 +137,9 @@ class DownloadManager:
     def _execute(self, url, file_path, segments, display, multithread, etag, overwrite):
         start_time = time.time()
 
-        file_path, multithread, etag = self._get_info(url, file_path, multithread, etag)
+        file_path, multithread, etag = asyncio.run(
+            self._get_info(url, file_path, multithread, etag)
+        )
 
         if not overwrite and Path(file_path).exists():
             self.completed = True
@@ -137,16 +150,20 @@ class DownloadManager:
                 url, file_path, segments, self.size, etag
             )
             segments = segment_table["segments"]
-            self._pool = ThreadPoolExecutor(max_workers=segments)
-            self._multi_thread(segments, segment_table)
+            with open("t.json", "w") as f:
+                import json
+
+                json.dump(segment_table, f, indent=4)
+
+            self._pool.submit(
+                lambda: asyncio.run(self._multi_thread(segments, segment_table))
+            )
         else:
-            self._pool = ThreadPoolExecutor(max_workers=1)
-            self._single_thread(url, file_path)
+            self._pool.submit(lambda: asyncio.run(self._single_thread(url, file_path)))
 
         recent_queue = deque([0] * 12, maxlen=12)
         download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
         interval = 0.5
-
         with ScreenCleaner(display):
             while True:
                 status = sum(worker.completed for worker in self._workers)
@@ -159,7 +176,7 @@ class DownloadManager:
                     self.time_spent = time.time() - start_time
                     return None
 
-                if status == len(self._workers):
+                if status and status == len(self._workers):
                     if multithread:
                         combine_files(file_path, segments)
                     self.completed = True

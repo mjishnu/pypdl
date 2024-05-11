@@ -3,8 +3,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional, Union
 
-from .manager import DownloadManager
-from .utls import (
+from manager import DownloadManager
+from utls import (
     AutoShutdownFuture,
     FileValidator,
     ScreenCleaner,

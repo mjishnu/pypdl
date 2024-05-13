@@ -38,6 +38,9 @@ class Pypdl(DownloadManager):
         verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(ThreadPoolExecutor(max_workers=2), **kwargs)
+
     def start(
         self,
         url: str,
@@ -80,7 +83,6 @@ class Pypdl(DownloadManager):
                     if i > 0 and display:
                         logging.info("Retrying... (%d/%d)", i, retries)
 
-                    self.__init__(**self._kwargs)
                     result = self._execute(
                         _url, file_path, segments, display, multithread, etag, overwrite
                     )
@@ -90,20 +92,16 @@ class Pypdl(DownloadManager):
                             print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
                         return result
 
+                    self._reset()
                     time.sleep(3)
 
                 except Exception as e:
                     logging.error("(%s) [%s]", e.__class__.__name__, e)
 
-                finally:
-                    if self._pool:
-                        self._pool.shutdown()
-
             self.failed = True
             return None
 
-        ex = ThreadPoolExecutor(max_workers=1)
-        future = AutoShutdownFuture(ex.submit(download), ex)
+        future = AutoShutdownFuture(self._pool.submit(download), self._pool)
 
         if block:
             result = future.result()

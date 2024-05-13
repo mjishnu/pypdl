@@ -1,6 +1,5 @@
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from pathlib import Path
 import asyncio
@@ -21,15 +20,12 @@ from utls import (
 
 
 class DownloadManager:
-    def __init__(self, **kwargs):
-        self._pool = ThreadPoolExecutor(max_workers=5)
+    def __init__(self, pool, **kwargs):
+        self._pool = pool
         self._workers = []
         self._interrupt = Event()
         self._stop = False
-        self._kwargs = {
-            "timeout": 100,
-            "allow_redirects": True,
-        }  # request module kwargs
+        self._kwargs = {"timeout": 20, "allow_redirects": True}  # request module kwargs
         self._kwargs.update(kwargs)
 
         self.size = None
@@ -41,6 +37,9 @@ class DownloadManager:
         self.remaining = None
         self.failed = False
         self.completed = False
+
+    def _reset(self):
+        self.__init__(self._pool, **self._kwargs)
 
     def _calc_values(self, recent_queue, interval):
         self.current_size = sum(worker.curr for worker in self._workers)
@@ -81,25 +80,28 @@ class DownloadManager:
         sd = Simpledown(self._interrupt)
         self._workers.append(sd)
         async with aiohttp.ClientSession() as session:
-            await sd.worker(url, file_path, session)
+            try:
+                await sd.worker(url, file_path, session)
+            except Exception as e:
+                logging.error("(%s) [%s]", e.__class__.__name__, e)
+                self._interrupt.set()
 
     async def _multi_thread(self, segments, segement_table):
         tasks = []
-        session = aiohttp.ClientSession()
-        for segment in range(segments):
-            md = Multidown(
-                segment,
-                self._interrupt,
-                **self._kwargs,
-            )
-            self._workers.append(md)
-            tasks.append(asyncio.create_task(md.worker(segement_table, session)))
-        try:
-            await asyncio.gather(*tasks)
-        except Exception as e:
-            logging.error("(%s) [%s]", e.__class__.__name__, e)
-        finally:
-            await session.close()
+        async with aiohttp.ClientSession() as session:
+            for segment in range(segments):
+                md = Multidown(self._interrupt)
+                self._workers.append(md)
+                tasks.append(
+                    asyncio.create_task(
+                        md.worker(segement_table, segment, session, **self._kwargs)
+                    )
+                )
+            try:
+                await asyncio.gather(*tasks)
+            except Exception as e:
+                self._interrupt.set()
+                logging.error("(%s) [%s]", e.__class__.__name__, e)
 
     async def _get_header(self, url):
         kwargs = self._kwargs.copy()
@@ -118,8 +120,8 @@ class DownloadManager:
             f"Server Returned: {response.reason}({response.status_code}), Invalid URL"
         )
 
-    async def _get_info(self, url, file_path, multithread, etag):
-        header = await self._get_header(url)
+    def _get_info(self, url, file_path, multithread, etag):
+        header = asyncio.run(self._get_header(url))
         file_path = get_filepath(url, header, file_path)
         if size := int(header.get("content-length", 0)):
             self.size = size
@@ -137,9 +139,7 @@ class DownloadManager:
     def _execute(self, url, file_path, segments, display, multithread, etag, overwrite):
         start_time = time.time()
 
-        file_path, multithread, etag = asyncio.run(
-            self._get_info(url, file_path, multithread, etag)
-        )
+        file_path, multithread, etag = self._get_info(url, file_path, multithread, etag)
 
         if not overwrite and Path(file_path).exists():
             self.completed = True
@@ -150,10 +150,6 @@ class DownloadManager:
                 url, file_path, segments, self.size, etag
             )
             segments = segment_table["segments"]
-            with open("t.json", "w") as f:
-                import json
-
-                json.dump(segment_table, f, indent=4)
 
             self._pool.submit(
                 lambda: asyncio.run(self._multi_thread(segments, segment_table))

@@ -38,16 +38,13 @@ class Pypdl(DownloadManager):
         verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(ThreadPoolExecutor(max_workers=2), **kwargs)
-
     def start(
         self,
         url: str,
         file_path: Optional[str] = None,
         segments: int = 10,
         display: bool = True,
-        multithread: bool = True,
+        multisegment: bool = True,
         block: bool = True,
         retries: int = 0,
         mirror_func: Optional[Callable[[], str]] = None,
@@ -63,7 +60,7 @@ class Pypdl(DownloadManager):
                 If `file_path` is a directory, the file is saved in that directory. If `file_path` is a file name, the file is saved with that name.
             segments (int, Optional): The number of segments to divide the file into for multi-threaded download. Default is 10.
             display (bool, Optional): Whether to display download progress and other messages. Default is True.
-            multithread (bool, Optional): Whether to use multi-threaded download. Default is True.
+            multisegment (bool, Optional): Whether to use multi-Segment download. Default is True.
             block (bool, Optional): Whether to block the function until the download is complete. Default is True.
             retries (int, Optional): The number of times to retry the download if it fails. Default is 0.
             mirror_func (Callable[[], str], Optional): A function that returns a new download URL if the download fails. Default is None.
@@ -80,11 +77,18 @@ class Pypdl(DownloadManager):
             for i in range(retries + 1):
                 try:
                     _url = mirror_func() if i > 0 and callable(mirror_func) else url
-                    if i > 0 and display:
+                    if i > 0:
                         logging.info("Retrying... (%d/%d)", i, retries)
 
+                    self._reset()
                     result = self._execute(
-                        _url, file_path, segments, display, multithread, etag, overwrite
+                        _url,
+                        file_path,
+                        segments,
+                        display,
+                        multisegment,
+                        etag,
+                        overwrite,
                     )
 
                     if self._stop or self.completed:
@@ -92,7 +96,6 @@ class Pypdl(DownloadManager):
                             print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
                         return result
 
-                    self._reset()
                     time.sleep(3)
 
                 except Exception as e:

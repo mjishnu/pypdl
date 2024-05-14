@@ -1,9 +1,11 @@
-import time
-from collections import deque
-from threading import Event
-from pathlib import Path
 import asyncio
 import logging
+import time
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from threading import Event
+
 import aiohttp
 
 from downloader import Multidown, Simpledown
@@ -12,20 +14,23 @@ from utls import (
     ScreenCleaner,
     combine_files,
     create_segment_table,
+    cursor_up,
     get_filepath,
     seconds_to_hms,
     to_mb,
-    cursor_up,
 )
 
 
 class DownloadManager:
-    def __init__(self, pool, **kwargs):
-        self._pool = pool
+    def __init__(self, **kwargs):
+        self._pool = ThreadPoolExecutor(max_workers=2)
         self._workers = []
         self._interrupt = Event()
         self._stop = False
-        self._kwargs = {"timeout": 20, "allow_redirects": True}  # request module kwargs
+        self._kwargs = {
+            "timeout": aiohttp.ClientTimeout(sock_read=10),
+            "allow_redirects": True,
+        }
         self._kwargs.update(kwargs)
 
         self.size = None
@@ -39,7 +44,19 @@ class DownloadManager:
         self.completed = False
 
     def _reset(self):
-        self.__init__(self._pool, **self._kwargs)
+        self._workers = []
+        self._interrupt.clear()
+        self._stop = False
+
+        self.size = None
+        self.progress = 0
+        self.speed = 0
+        self.time_spent = 0
+        self.current_size = 0
+        self.eta = "99:59:59"
+        self.remaining = None
+        self.failed = False
+        self.completed = False
 
     def _calc_values(self, recent_queue, interval):
         self.current_size = sum(worker.curr for worker in self._workers)
@@ -112,15 +129,16 @@ class DownloadManager:
                 if response.status == 200:
                     return response.headers
 
-            async with session.get(url, stream=True, **self._kwargs) as response:
+            async with session.get(url, **self._kwargs) as response:
                 if response.status == 200:
                     return response.headers
+
         self._interrupt.set()
         raise ConnectionError(
-            f"Server Returned: {response.reason}({response.status_code}), Invalid URL"
+            f"Server Returned: {response.reason}({response.status}), Invalid URL"
         )
 
-    def _get_info(self, url, file_path, multithread, etag):
+    def _get_info(self, url, file_path, multisegment, etag):
         header = asyncio.run(self._get_header(url))
         file_path = get_filepath(url, header, file_path)
         if size := int(header.get("content-length", 0)):
@@ -132,20 +150,24 @@ class DownloadManager:
             etag = etag.strip('"')
 
         if not self.size or not header.get("accept-ranges"):
-            multithread = False
+            multisegment = False
 
-        return file_path, multithread, etag
+        return file_path, multisegment, etag
 
-    def _execute(self, url, file_path, segments, display, multithread, etag, overwrite):
+    def _execute(
+        self, url, file_path, segments, display, multisegment, etag, overwrite
+    ):
         start_time = time.time()
 
-        file_path, multithread, etag = self._get_info(url, file_path, multithread, etag)
+        file_path, multisegment, etag = self._get_info(
+            url, file_path, multisegment, etag
+        )
 
         if not overwrite and Path(file_path).exists():
             self.completed = True
             return FileValidator(file_path)
 
-        if multithread:
+        if multisegment:
             segment_table = create_segment_table(
                 url, file_path, segments, self.size, etag
             )
@@ -158,7 +180,7 @@ class DownloadManager:
             self._pool.submit(lambda: asyncio.run(self._single_thread(url, file_path)))
 
         recent_queue = deque([0] * 12, maxlen=12)
-        download_mode = "Multi-Threaded" if multithread else "Single-Threaded"
+        download_mode = "Multi-Segment" if multisegment else "Single-Segment"
         interval = 0.5
         with ScreenCleaner(display):
             while True:
@@ -173,7 +195,7 @@ class DownloadManager:
                     return None
 
                 if status and status == len(self._workers):
-                    if multithread:
+                    if multisegment:
                         combine_files(file_path, segments)
                     self.completed = True
                     self.time_spent = time.time() - start_time

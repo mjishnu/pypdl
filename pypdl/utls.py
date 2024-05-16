@@ -128,15 +128,16 @@ class FileValidator:
 
 
 class AutoShutdownFuture:
-    """A Future object wrapper that shuts down the executor when the result is retrieved."""
+    """A Future object wrapper that shutsdown the executors when the result is retrieved."""
 
-    def __init__(self, future: Future, executor: Executor):
+    def __init__(self, future: Future, executors: list[Executor]):
         self.future = future
-        self.executor = executor
+        self.executors = executors
 
     def result(self, timeout: float = None) -> Union[FileValidator, None]:
         result = self.future.result(timeout)
-        self.executor.shutdown()
+        for executor in self.executors:
+            executor.shutdown()
         return result
 
 

@@ -1,6 +1,6 @@
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from typing import Callable, Optional, Union
 
 from manager import DownloadManager
@@ -38,6 +38,10 @@ class Pypdl(DownloadManager):
         verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
     """
 
+    def __init__(self, allow_reuse=False, **kwargs):
+        super().__init__(**kwargs)
+        self._allow_reuse = allow_reuse
+
     def start(
         self,
         url: str,
@@ -50,7 +54,7 @@ class Pypdl(DownloadManager):
         mirror_func: Optional[Callable[[], str]] = None,
         etag: bool = True,
         overwrite: bool = True,
-    ) -> Union[AutoShutdownFuture, FileValidator, None]:
+    ) -> Union[AutoShutdownFuture, Future, FileValidator, None]:
         """
         Start the download process.
 
@@ -104,7 +108,10 @@ class Pypdl(DownloadManager):
             self.failed = True
             return None
 
-        future = AutoShutdownFuture(self._pool.submit(download), self._pool)
+        if self._allow_reuse:
+            future = self._pool.submit(download)
+        else:
+            future = AutoShutdownFuture(self._pool.submit(download), [self._pool])
 
         if block:
             result = future.result()
@@ -117,6 +124,9 @@ class Pypdl(DownloadManager):
         self._interrupt.set()
         self._stop = True
         time.sleep(1)  # wait for threads
+
+    def shutdown(self):
+        self._pool.shutdown()
 
 
 class PypdlFactory:
@@ -135,12 +145,12 @@ class PypdlFactory:
         verify (bool or str, optional): A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
     """
 
-    def __init__(self, instances: int = 2, **kwargs):
-        if not hasattr(self, "_instances"):
-            self._instances = [Pypdl(**kwargs) for _ in range(instances)]
+    def __init__(self, instances: int = 2, allow_reuse=False, **kwargs):
+        self._instances = [Pypdl(True, **kwargs) for _ in range(instances)]
+        self._allow_reuse = allow_reuse
+        self._pool = ThreadPoolExecutor(max_workers=2)
         self._stop = False
         self._prog = True
-        self._pool = None
         self._completed_size = 0
         self._completed_prog = 0
 
@@ -153,6 +163,15 @@ class PypdlFactory:
         self.completed = []
         self.failed = []
         self.remaining = []
+
+    def _reset(self):
+        self._stop = False
+        self._prog = True
+        self._completed_size = 0
+        self._completed_prog = 0
+        self.completed.clear()
+        self.failed.clear()
+        self.remaining.clear()
 
     def _calc_values(self):
         def sum_attribute(instances, attribute):
@@ -214,8 +233,8 @@ class PypdlFactory:
         url, *kwargs = task
         kwargs = kwargs[0] if kwargs else {}
         kwargs.update({"block": False, "display": False, "overwrite": False})
-        job = instance.start(url, **kwargs)
-        futures[job.future] = (job, instance, url)
+        future = instance.start(url, **kwargs)
+        futures[future] = (instance, url)
 
     def _execute(self, tasks):
         start_time = time.time()
@@ -231,8 +250,7 @@ class PypdlFactory:
                 break
 
             for future in as_completed(futures):
-                job, instance, curr_url = futures.pop(future)
-                result = job.result()  # shutdown executor
+                instance, curr_url = futures.pop(future)
 
                 if instance.completed:
                     if instance.size:
@@ -240,10 +258,11 @@ class PypdlFactory:
                     else:
                         self._prog = False
                     self._completed_prog += int((1 / self.total) * 100)
-                    self.completed.append((curr_url, result))
+                    self.completed.append((curr_url, future.result()))
                 elif instance.failed:
                     self.failed.append(curr_url)
                     logging.error("Download failed: %s", curr_url)
+
                 else:
                     continue
 
@@ -255,7 +274,7 @@ class PypdlFactory:
 
     def start(
         self, tasks: list, display: bool = True, block: bool = True
-    ) -> Union[AutoShutdownFuture, list]:
+    ) -> Union[AutoShutdownFuture, Future, list]:
         """
         Start the download process for multiple tasks.
 
@@ -269,15 +288,13 @@ class PypdlFactory:
             AutoShutdownFuture: If `block` is False. This is a future object that can be used to check the status of the downloads.
             list: If `block` is True. This is a list of tuples where each tuple contains the URL of the download and the result of the download.
         """
-
-        self.__init__()
-
-        if block:
-            self._pool = ThreadPoolExecutor(max_workers=1)
+        self._reset()
+        if self._allow_reuse:
+            future = self._pool.submit(self._execute, tasks)
         else:
-            self._pool = ThreadPoolExecutor(max_workers=2)
-
-        future = AutoShutdownFuture(self._pool.submit(self._execute, tasks), self._pool)
+            future = AutoShutdownFuture(
+                self._pool.submit(self._execute, tasks), [*self._instances, self._pool]
+            )
 
         if block:
             self._compute(display)
@@ -292,4 +309,8 @@ class PypdlFactory:
         self._stop = True
         for instance in self._instances:
             instance.stop()
+
+    def shutdown(self):
+        for instance in self._instances:
+            instance.shutdown()
         self._pool.shutdown()

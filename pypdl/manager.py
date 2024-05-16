@@ -44,17 +44,10 @@ class DownloadManager:
         self.completed = False
 
     def _reset(self):
-        self._workers = []
+        self._workers.clear()
         self._interrupt.clear()
         self._stop = False
 
-        self.size = None
-        self.progress = 0
-        self.speed = 0
-        self.time_spent = 0
-        self.current_size = 0
-        self.eta = "99:59:59"
-        self.remaining = None
         self.failed = False
         self.completed = False
 

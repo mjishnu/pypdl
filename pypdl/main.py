@@ -2,6 +2,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from typing import Callable, Optional, Union
+from threading import Event
 
 from manager import DownloadManager
 from utls import (
@@ -105,6 +106,7 @@ class Pypdl(DownloadManager):
                 except Exception as e:
                     logging.error("(%s) [%s]", e.__class__.__name__, e)
 
+            self._status = 1
             self.failed = True
             return None
 
@@ -153,13 +155,14 @@ class PypdlFactory:
         self._prog = True
         self._completed_size = 0
         self._completed_prog = 0
+        self._lock = Event()
+        self._running = []
 
         self.progress = 0
         self.speed = 0
         self.time_spent = 0
         self.current_size = 0
         self.total = 0
-        self.eta = "99:59:59"
         self.completed = []
         self.failed = []
         self.remaining = []
@@ -169,6 +172,7 @@ class PypdlFactory:
         self._prog = True
         self._completed_size = 0
         self._completed_prog = 0
+        self._running.clear()
         self.completed.clear()
         self.failed.clear()
         self.remaining.clear()
@@ -180,22 +184,16 @@ class PypdlFactory:
         def average_attribute(instances, attribute, total):
             return sum_attribute(instances, attribute) // total
 
-        self.speed = average_attribute(self._instances, "speed", len(self._instances))
+        if self._running:
+            self.speed = average_attribute(self._running, "speed", len(self._running))
 
-        self.progress = (
-            average_attribute(self._instances, "progress", self.total)
-            + self._completed_prog
-        )
-        self.current_size = (
-            sum_attribute(self._instances, "current_size") + self._completed_size
-        )
-
-        if self.speed:
-            self.eta = seconds_to_hms(
-                (sum_attribute(self._instances, "remaining") // self.speed) * self.total
+            self.progress = (
+                average_attribute(self._running, "progress", self.total)
+                + self._completed_prog
             )
-        else:
-            self.eta = "99:59:59"
+            self.current_size = (
+                sum_attribute(self._running, "current_size") + self._completed_size
+            )
 
     def _display(self):
         cursor_up()
@@ -206,7 +204,7 @@ class PypdlFactory:
 
         if prog:
             progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
-            info = f"Total: {completed}/{self.total}, Downloaded: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
+            info = f"Total: {completed}/{self.total}, Downloaded: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s "
             print(progress_bar + info)
         else:
             download_stats = f"Downloading...{" " * 95}\n"
@@ -216,25 +214,31 @@ class PypdlFactory:
     def _compute(self, display):
         with ScreenCleaner(display):
             while len(self.completed) + len(self.failed) < self.total:
-                self._calc_values()
-                if display:
-                    self._display()
-                if self._stop:
-                    break
+                if not self._lock.is_set():
+                    self._calc_values()
+
+                    if display:
+                        self._display()
+
+                    if self._stop:
+                        break
                 time.sleep(0.5)
 
             self.progress = self._completed_prog
             self.current_size = self._completed_size
             if display:
                 self._display()
-                print("Time elapsed: ", seconds_to_hms(self.time_spent))
+                print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
 
     def _add_future(self, instance, task, futures):
         url, *kwargs = task
+        instance._status = None
         kwargs = kwargs[0] if kwargs else {}
         kwargs.update({"block": False, "display": False, "overwrite": False})
         future = instance.start(url, **kwargs)
         futures[future] = (instance, url)
+        while instance._status is None:
+            time.sleep(0.1)
 
     def _execute(self, tasks):
         start_time = time.time()
@@ -244,6 +248,9 @@ class PypdlFactory:
 
         for instance, task in zip(self._instances, tasks):
             self._add_future(instance, task, futures)
+            self._running.append(instance)
+
+        self._lock.clear()
 
         while len(self.completed) + len(self.failed) < self.total:
             if self._stop:
@@ -253,6 +260,7 @@ class PypdlFactory:
                 instance, curr_url = futures.pop(future)
 
                 if instance.completed:
+                    self._lock.set()
                     if instance.size:
                         self._completed_size += instance.size
                     else:
@@ -260,16 +268,24 @@ class PypdlFactory:
                     self._completed_prog += int((1 / self.total) * 100)
                     self.completed.append((curr_url, future.result()))
                 elif instance.failed:
+                    self._lock.set()
                     self.failed.append(curr_url)
                     logging.error("Download failed: %s", curr_url)
-
                 else:
                     continue
 
                 if self.remaining:
                     self._add_future(instance, self.remaining.pop(0), futures)
+                else:
+                    self._running.remove(instance)
+
+                if len(self.completed) + len(self.failed) < self.total:
+                    self._lock.clear()
+                    time.sleep(0.5)
 
         self.time_spent = time.time() - start_time
+        self._lock.clear()
+
         return self.completed
 
     def start(
@@ -296,6 +312,8 @@ class PypdlFactory:
                 self._pool.submit(self._execute, tasks), [*self._instances, self._pool]
             )
 
+        self._lock.set()
+
         if block:
             self._compute(display)
             result = future.result()
@@ -306,6 +324,7 @@ class PypdlFactory:
 
     def stop(self):
         """Stops all active downloads."""
+        self._lock.set()
         self._stop = True
         for instance in self._instances:
             instance.stop()

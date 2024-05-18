@@ -25,10 +25,11 @@ class DownloadManager:
     def __init__(self, **kwargs):
         self._pool = ThreadPoolExecutor(max_workers=2)
         self._workers = []
+        self._status = 0
         self._interrupt = Event()
         self._stop = False
         self._kwargs = {
-            "timeout": aiohttp.ClientTimeout(sock_read=10),
+            "timeout": aiohttp.ClientTimeout(sock_read=60),
             "allow_redirects": True,
         }
         self._kwargs.update(kwargs)
@@ -48,6 +49,13 @@ class DownloadManager:
         self._interrupt.clear()
         self._stop = False
 
+        self.size = None
+        self.progress = 0
+        self.speed = 0
+        self.time_spent = 0
+        self.current_size = 0
+        self.eta = "99:59:59"
+        self.remaining = None
         self.failed = False
         self.completed = False
 
@@ -157,6 +165,7 @@ class DownloadManager:
         )
 
         if not overwrite and Path(file_path).exists():
+            self._status = 1
             self.completed = True
             return FileValidator(file_path)
 
@@ -175,6 +184,7 @@ class DownloadManager:
         recent_queue = deque([0] * 12, maxlen=12)
         download_mode = "Multi-Segment" if multisegment else "Single-Segment"
         interval = 0.5
+        self._status = 1
         with ScreenCleaner(display):
             while True:
                 status = sum(worker.completed for worker in self._workers)

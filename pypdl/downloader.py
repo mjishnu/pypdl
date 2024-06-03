@@ -1,9 +1,9 @@
 import copy
-import aiofiles
-from aiohttp import ClientSession
 from pathlib import Path
 from threading import Event
 
+import aiofiles
+from aiohttp import ClientSession
 
 MEGABYTE = 1048576
 
@@ -34,7 +34,9 @@ class Basicdown:
 class Simpledown(Basicdown):
     """Class for downloading the whole file in a single segment."""
 
-    async def worker(self, url, file_path, session, **kwargs) -> None:
+    async def worker(
+        self, url: str, file_path: str, session: ClientSession, **kwargs
+    ) -> None:
         await self.download(url, file_path, "wb", session, **kwargs)
         self.completed = True
 
@@ -42,13 +44,15 @@ class Simpledown(Basicdown):
 class Multidown(Basicdown):
     """Class for downloading a specific segment of the file."""
 
-    async def worker(self, segement_table, id, session, **kwargs) -> None:
-        url = segement_table["url"]
-        overwrite = segement_table["overwrite"]
-        segment_path = Path(segement_table[id]["segment_path"])
-        start = segement_table[id]["start"]
-        end = segement_table[id]["end"]
-        size = segement_table[id]["segment_size"]
+    async def worker(
+        self, segment_table: dict, id: int, session: ClientSession, **kwargs
+    ) -> None:
+        url = segment_table["url"]
+        overwrite = segment_table["overwrite"]
+        segment_path = Path(segment_table[id]["segment_path"])
+        start = segment_table[id]["start"]
+        end = segment_table[id]["end"]
+        size = segment_table[id]["segment_size"]
 
         if segment_path.exists():
             downloaded_size = segment_path.stat().st_size

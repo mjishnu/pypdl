@@ -128,7 +128,7 @@ class FileValidator:
 
 
 class AutoShutdownFuture:
-    """A Future object wrapper that shutsdown the executors when the result is retrieved."""
+    """A Future object wrapper that shuts down the executors when the result is retrieved."""
 
     def __init__(self, future: Future, executors: list[Executor]):
         self.future = future

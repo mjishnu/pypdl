@@ -2,14 +2,16 @@ import asyncio
 import logging
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
+from typing import Callable, Optional, Union
 
 import aiohttp
 
-from downloader import Multidown, Simpledown
-from utls import (
+from .downloader import Multidown, Simpledown
+from .utls import (
+    AutoShutdownFuture,
     FileValidator,
     ScreenCleaner,
     combine_files,
@@ -22,17 +24,15 @@ from utls import (
 
 
 class DownloadManager:
-    def __init__(self, **kwargs):
+    def __init__(self, allow_reuse=False, **kwargs):
         self._pool = ThreadPoolExecutor(max_workers=2)
         self._workers = []
         self._status = 0
         self._interrupt = Event()
         self._stop = False
-        self._kwargs = {
-            "timeout": aiohttp.ClientTimeout(sock_read=60),
-            "allow_redirects": True,
-        }
+        self._kwargs = {"timeout": aiohttp.ClientTimeout(sock_read=60)}
         self._kwargs.update(kwargs)
+        self._allow_reuse = allow_reuse
 
         self.size = None
         self.progress = 0
@@ -104,7 +104,7 @@ class DownloadManager:
                 logging.error("(%s) [%s]", e.__class__.__name__, e)
                 self._interrupt.set()
 
-    async def _multi_thread(self, segments, segement_table):
+    async def _multi_thread(self, segments, segment_table):
         tasks = []
         async with aiohttp.ClientSession() as session:
             for segment in range(segments):
@@ -112,7 +112,7 @@ class DownloadManager:
                 self._workers.append(md)
                 tasks.append(
                     asyncio.create_task(
-                        md.worker(segement_table, segment, session, **self._kwargs)
+                        md.worker(segment_table, segment, session, **self._kwargs)
                     )
                 )
             try:
@@ -205,3 +205,91 @@ class DownloadManager:
                     return FileValidator(file_path)
 
                 time.sleep(interval)
+
+    def start(
+        self,
+        url: str,
+        file_path: Optional[str] = None,
+        segments: int = 10,
+        display: bool = True,
+        multisegment: bool = True,
+        block: bool = True,
+        retries: int = 0,
+        mirror_func: Optional[Callable[[], str]] = None,
+        etag: bool = True,
+        overwrite: bool = True,
+    ) -> Union[AutoShutdownFuture, Future, FileValidator, None]:
+        """
+        Start the download process.
+
+        Parameters:
+            url (str): The URL to download from.
+            file_path (str, Optional): The path to save the downloaded file. If not provided, the file is saved in the current working directory.
+                If `file_path` is a directory, the file is saved in that directory. If `file_path` is a file name, the file is saved with that name.
+            segments (int, Optional): The number of segments to divide the file into for multi-threaded download. Default is 10.
+            display (bool, Optional): Whether to display download progress and other messages. Default is True.
+            multisegment (bool, Optional): Whether to use multi-Segment download. Default is True.
+            block (bool, Optional): Whether to block the function until the download is complete. Default is True.
+            retries (int, Optional): The number of times to retry the download if it fails. Default is 0.
+            mirror_func (Callable[[], str], Optional): A function that returns a new download URL if the download fails. Default is None.
+            etag (bool, Optional): Whether to validate the ETag before resuming downloads. Default is True.
+            overwrite (bool, Optional): Whether to overwrite the file if it already exists. Default is True.
+
+        Returns:
+            AutoShutdownFuture: If `block` is False.
+            FileValidator: If `block` is True and the download successful.
+            None: If `block` is True and the download fails.
+        """
+
+        def download():
+            for i in range(retries + 1):
+                try:
+                    _url = mirror_func() if i > 0 and callable(mirror_func) else url
+                    if i > 0:
+                        logging.info("Retrying... (%d/%d)", i, retries)
+
+                    self._reset()
+                    result = self._execute(
+                        _url,
+                        file_path,
+                        segments,
+                        display,
+                        multisegment,
+                        etag,
+                        overwrite,
+                    )
+
+                    if self._stop or self.completed:
+                        if display:
+                            print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
+                        return result
+
+                    time.sleep(3)
+
+                except Exception as e:
+                    logging.error("(%s) [%s]", e.__class__.__name__, e)
+
+            self._status = 1
+            self.failed = True
+            return None
+
+        if self._allow_reuse:
+            future = self._pool.submit(download)
+        else:
+            future = AutoShutdownFuture(self._pool.submit(download), [self._pool])
+
+        if block:
+            result = future.result()
+            return result
+
+        return future
+
+    def stop(self) -> None:
+        """Stop the download process."""
+        self._interrupt.set()
+        self._stop = True
+        time.sleep(1)  # wait for threads
+
+    def shutdown(self) -> None:
+        """Shutdown the download manager."""
+        self._pool.shutdown()

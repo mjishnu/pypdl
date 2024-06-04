@@ -9,8 +9,8 @@ from typing import Callable, Optional, Union
 
 import aiohttp
 
-from downloader import Multidown, Simpledown
-from utls import (
+from .downloader import Multidown, Simpledown
+from .utls import (
     AutoShutdownFuture,
     FileValidator,
     ScreenCleaner,
@@ -31,7 +31,7 @@ class DownloadManager:
         self._interrupt = Event()
         self._stop = False
         self._kwargs = {"timeout": aiohttp.ClientTimeout(sock_read=60)}
-        self._kwargs.update(kwargs)
+        self._kwargs.update({**kwargs, "raise_for_status": True})
         self._allow_reuse = allow_reuse
 
         self.size = None
@@ -64,7 +64,7 @@ class DownloadManager:
             url (str): The URL to download from.
             file_path (str, Optional): The path to save the downloaded file. If not provided, the file is saved in the current working directory.
                 If `file_path` is a directory, the file is saved in that directory. If `file_path` is a file name, the file is saved with that name.
-            segments (int, Optional): The number of segments to divide the file into for multi-threaded download. Default is 10.
+            segments (int, Optional): The number of segments to divide the file into for multi-segment download. Default is 10.
             display (bool, Optional): Whether to display download progress and other messages. Default is True.
             multisegment (bool, Optional): Whether to use multi-Segment download. Default is True.
             block (bool, Optional): Whether to block the function until the download is complete. Default is True.
@@ -126,7 +126,7 @@ class DownloadManager:
         """Stop the download process."""
         self._interrupt.set()
         self._stop = True
-        time.sleep(1)  # wait for threads
+        time.sleep(1)
 
     def shutdown(self) -> None:
         """Shutdown the download manager."""
@@ -168,10 +168,10 @@ class DownloadManager:
             segments = segment_table["segments"]
 
             self._pool.submit(
-                lambda: asyncio.run(self._multi_thread(segments, segment_table))
+                lambda: asyncio.run(self._multi_segment(segments, segment_table))
             )
         else:
-            self._pool.submit(lambda: asyncio.run(self._single_thread(url, file_path)))
+            self._pool.submit(lambda: asyncio.run(self._single_segment(url, file_path)))
 
         recent_queue = deque([0] * 12, maxlen=12)
         download_mode = "Multi-Segment" if multisegment else "Single-Segment"
@@ -216,7 +216,7 @@ class DownloadManager:
 
     async def _get_header(self, url):
         kwargs = self._kwargs.copy()
-        kwargs.pop("params", None)
+        kwargs.update({"raise_for_status": False})
 
         async with aiohttp.ClientSession() as session:
             async with session.head(url, **kwargs) as response:
@@ -232,27 +232,27 @@ class DownloadManager:
             f"Server Returned: {response.reason}({response.status}), Invalid URL"
         )
 
-    async def _multi_thread(self, segments, segment_table):
+    async def _multi_segment(self, segments, segment_table):
         tasks = []
         async with aiohttp.ClientSession() as session:
             for segment in range(segments):
                 md = Multidown(self._interrupt)
                 self._workers.append(md)
-            try:
                 tasks.append(
                     asyncio.create_task(
                         md.worker(segment_table, segment, session, **self._kwargs)
                     )
                 )
+            try:
                 await asyncio.gather(*tasks)
             except Exception as e:
-                self._interrupt.set()
                 logging.error("(%s) [%s]", e.__class__.__name__, e)
+                self._interrupt.set()
 
-    async def _single_thread(self, url, file_path):
-        sd = Simpledown(self._interrupt)
-        self._workers.append(sd)
+    async def _single_segment(self, url, file_path):
         async with aiohttp.ClientSession() as session:
+            sd = Simpledown(self._interrupt)
+            self._workers.append(sd)
             try:
                 await sd.worker(url, file_path, session)
             except Exception as e:

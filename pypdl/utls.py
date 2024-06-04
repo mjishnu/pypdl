@@ -49,7 +49,7 @@ def get_filepath(url: str, headers: Dict, file_path: str) -> str:
 def create_segment_table(
     url: str, file_path: str, segments: str, size: int, etag: Union[str, bool]
 ) -> Dict:
-    """Create a segment table for multi-threaded download."""
+    """Create a segment table for multi-segment download."""
     progress_file = Path(file_path + ".json")
     overwrite = True
 

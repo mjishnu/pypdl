@@ -1,4 +1,3 @@
-import copy
 from pathlib import Path
 from threading import Event
 
@@ -63,9 +62,8 @@ class Multidown(Basicdown):
 
         if self.curr < size:
             start = start + self.curr
-            _kwargs = copy.deepcopy(kwargs)  # since used by others
-            _kwargs.setdefault("headers", {}).update({"range": f"bytes={start}-{end}"})
-            await self.download(url, segment_path, "ab", session, **_kwargs)
+            kwargs.setdefault("headers", {}).update({"range": f"bytes={start}-{end}"})
+            await self.download(url, segment_path, "ab", session, **kwargs)
 
         if self.curr == size:
             self.completed = True

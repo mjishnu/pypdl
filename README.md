@@ -1,6 +1,6 @@
 # pypdl
 
-pypdl is a Python library for downloading files from the internet. It provides features such as multi-threaded downloads, retry download in case of failure, option to continue downloading using a different URL if necessary, progress tracking, pause/resume functionality, checksum and many more.
+pypdl is a Python library for downloading files from the internet. It provides features such as multi-segmented downloads, retry download in case of failure, option to continue downloading using a different URL if necessary, progress tracking, pause/resume functionality, checksum and many more.
 
 ## Table of Contents
 
@@ -53,7 +53,7 @@ dl.start(
     file_path='file.txt',
     segments=10,
     display=True,
-    multithread=True,
+    multisegment=True,
     block=True,
     retries=0,
     mirror_func=None,
@@ -66,9 +66,9 @@ Each option is explained below:
 - `allow_reuse`: Whether to allow reuse of existing Pypdl object for next download. The default value is `False`. 
 - `url`: The URL of the file to download.
 - `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it  otherwise, the file is downloaded into the given path.\
-- `segments`: The number of segments the file should be divided in multi-threaded download. The default value is 10.
+- `segments`: The number of segments the file should be divided in multi-segmented download. The default value is 10.
 - `display`: Whether to display download progress and other optional messages. The default value is `True`.
-- `multithread`: Whether to use multi-threaded download. The default value is `True`.
+- `multisegment`: Whether to use multi-segmented download. The default value is `True`.
 - `block`: Whether to block until the download is complete. The default value is `True`.
 - `retries`: The number of times to retry the download in case of an error. The default value is 0.
 - `mirror_func`: A function to get a new download URL in case of an error.
@@ -106,7 +106,7 @@ def main():
         file_path='100MB.bin',
         segments=10,
         display=True,
-        multithread=True,
+        multisegment=True,
         block=True,
         retries=3,
         mirror_func=None,
@@ -117,7 +117,7 @@ if __name__ == '__main__':
     main()
 ```
 
-This example downloads a file from the internet using 10 threads and displays the download progress. If the download fails, it will retry up to 3 times. we are also using headers, proxies and authentication.
+This example downloads a file from the internet using 10 segments and displays the download progress. If the download fails, it will retry up to 3 times. we are also using headers, proxies and authentication.
 
 Another example of implementing pause resume functionality and printing the progress to console:
 
@@ -270,7 +270,7 @@ factory.shutdown()
 
 ### `Pypdl()`
 
-The `Pypdl` class represents a file downloader that can download a file from a given URL to a specified file path. The class supports both single-threaded and multi-threaded downloads and many other features like retry download incase of failure and option to continue downloading using a different url if necessary, pause/resume functionality, progress tracking etc.
+The `Pypdl` class represents a file downloader that can download a file from a given URL to a specified file path. The class supports both single-segmented and multi-segmented downloads and many other features like retry download incase of failure and option to continue downloading using a different url if necessary, pause/resume functionality, progress tracking etc.
 
 #### Arguments
 - `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `Pypdl` object for next download. The default value is `False`.It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
@@ -290,15 +290,15 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 
 #### Methods
 
-- `start(url, file_path, segments=10, display=True, multithread=True, block=True, retries=0, mirror_func=None, etag=False)`: Starts the download process.
+- `start(url, file_path, segments=10, display=True, multisegment=True, block=True, retries=0, mirror_func=None, etag=False)`: Starts the download process.
 
     ##### Parameters
 
     - `url`: (str) The download URL.
     - `file_path`: (str, Optional) The optional file path to save the download. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded with the given name.
-    - `segments`: (int, Optional) The number of segments the file should be divided into for multi-threaded download.
+    - `segments`: (int, Optional) The number of segments the file should be divided into for multi-segmented download.
     - `display`: (bool, Optional) Whether to display download progress and other optional messages.
-    - `multithread`: (bool, Optional) Whether to use multi-threaded download.
+    - `multisegment`: (bool, Optional) Whether to use multi-segmented download.
     - `block`: (bool, Optional) Whether to block until the download is complete.
     - `retries`: (int, Optional) The number of times to retry the download in case of an error.
     - `mirror_func`: (function, Optional) A function to get a new download URL in case of an error.

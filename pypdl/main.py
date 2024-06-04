@@ -1,7 +1,7 @@
 import logging
 
-from factory import Factory
-from manager import DownloadManager
+from .factory import Factory
+from .manager import DownloadManager
 
 handler = logging.FileHandler("pypdl.log", mode="a", delay=True)
 handler.setFormatter(
@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 class Pypdl(DownloadManager):
     """
-    A multi-threaded file downloader that supports progress tracking, retries, pause/resume functionality etc.
+    A multi-segment file downloader that supports progress tracking, retries, pause/resume functionality etc.
 
     This class accepts keyword arguments that are valid for aiohttp.ClientSession.
     """

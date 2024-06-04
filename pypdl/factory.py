@@ -4,8 +4,8 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Union
 
-from manager import DownloadManager as Pypdl
-from utls import (
+from .manager import DownloadManager as Pypdl
+from .utls import (
     AutoShutdownFuture,
     ScreenCleaner,
     cursor_up,
@@ -116,7 +116,7 @@ class Factory:
                 if instance.completed:
                     self._handle_completed(instance, curr_url, future.result())
                 elif instance.failed:
-                    self._handle_failed(instance, curr_url)
+                    self._handle_failed(curr_url)
 
                 self._manage_remaining(instance, futures)
 
@@ -144,7 +144,7 @@ class Factory:
         self._completed_prog += int((1 / self.total) * 100)
         self.completed.append((curr_url, result))
 
-    def _handle_failed(self, instance, curr_url):
+    def _handle_failed(self, curr_url):
         self._lock.set()
         self.failed.append(curr_url)
         logging.error("Download failed: %s", curr_url)

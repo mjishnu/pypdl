@@ -22,7 +22,7 @@ setup(
         "Operating System :: OS Independent",
     },
     packages=find_packages(),
-    install_requires=["aiohttp, aiofiles"],
+    install_requires=["aiohttp", "aiofiles"],
     keywords=[
         "python",
         "downloader",

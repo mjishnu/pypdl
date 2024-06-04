@@ -22,6 +22,11 @@ def seconds_to_hms(sec: float) -> str:
     return time.strftime("%H:%M:%S", time_struct)
 
 
+def cursor_up() -> None:
+    sys.stdout.write("\x1b[1A" * 2)  # Move cursor up two lines
+    sys.stdout.flush()
+
+
 def get_filepath(url: str, headers: Dict, file_path: str) -> str:
     content_disposition = headers.get("Content-Disposition", None)
 
@@ -44,13 +49,18 @@ def get_filepath(url: str, headers: Dict, file_path: str) -> str:
 def create_segment_table(
     url: str, file_path: str, segments: str, size: int, etag: Union[str, bool]
 ) -> Dict:
-    """Create a segment table for multi-threaded download."""
+    """Create a segment table for multi-segment download."""
     progress_file = Path(file_path + ".json")
+    overwrite = True
 
     if progress_file.exists():
         progress = json.loads(progress_file.read_text())
-        if etag is True or (progress["url"] == url and progress["etag"] == etag):
+
+        if (etag is True) or (
+            progress["etag"] and (progress["url"] == url and progress["etag"] == etag)
+        ):
             segments = progress["segments"]
+            overwrite = False
 
     progress_file.write_text(
         json.dumps(
@@ -59,7 +69,7 @@ def create_segment_table(
         )
     )
 
-    dic = {"url": url, "segments": segments}
+    dic = {"url": url, "segments": segments, "overwrite": overwrite}
     partition_size, add_bytes = divmod(size, segments)
 
     for segment in range(segments):
@@ -118,28 +128,32 @@ class FileValidator:
 
 
 class AutoShutdownFuture:
-    """A Future object wrapper that shuts down the executor when the result is retrieved."""
+    """A Future object wrapper that shuts down the executors when the result is retrieved."""
 
-    def __init__(self, future: Future, executor: Executor):
+    def __init__(self, future: Future, executors: list[Executor]):
         self.future = future
-        self.executor = executor
+        self.executors = executors
 
     def result(self, timeout: float = None) -> Union[FileValidator, None]:
         result = self.future.result(timeout)
-        self.executor.shutdown()
+        for executor in self.executors:
+            executor.shutdown()
         return result
 
 
 class ScreenCleaner:
     """A context manager to clear the screen and hide cursor."""
 
-    def __init__(self, display):
+    def __init__(self, display: bool):
         self.display = display
+
+    def clear(self) -> None:
+        sys.stdout.write("\033c")  # Clear screen
+        sys.stdout.write("\x1b[?25l")  # Hide cursor
 
     def __enter__(self):
         if self.display:
-            sys.stdout.write("\033c")  # Clear screen
-            sys.stdout.write("\x1b[?25l")  # Hide cursor
+            self.clear()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

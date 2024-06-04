@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = "1.3.3"
+VERSION = "1.4.0"
 DESCRIPTION = "A concurrent python download manager"
 with open("README.md", "r") as f:
     LONG_DESCRIPTION = f.read()
@@ -22,14 +22,22 @@ setup(
         "Operating System :: OS Independent",
     },
     packages=find_packages(),
-    install_requires=["requests"],
+    install_requires=["aiohttp, aiofiles"],
     keywords=[
         "python",
         "downloader",
+        "multi-threaded-downloader",
         "concurrent-downloader",
-        "parrel-downloader",
-        "download manager",
+        "parallel-downloader",
+        "async-downloader",
+        "asyncronous-downloader",
+        "download-manager",
         "fast-downloader",
+        "download-accelerator",
+        "download-optimizer",
+        "download-utility",
+        "download-tool",
+        "download-automation",
     ],
     python_requires=">=3.8",
 )

@@ -45,6 +45,9 @@ dl.start('http://example.com/file.txt')
 The `Pypdl` object provides additional options for advanced usage:
 
 ```py
+from pypdl import Pypdl
+
+dl = Pypdl(allow_reuse=False)
 dl.start(
     url='http://example.com/file.txt',
     file_path='file.txt',
@@ -54,14 +57,15 @@ dl.start(
     block=True,
     retries=0,
     mirror_func=None,
-    etag=True
+    etag=True,
+    overwrite=False
 )
 ```
 
 Each option is explained below:
-
+- `allow_reuse`: Whether to allow reuse of existing Pypdl object for next download. The default value is `False`. 
 - `url`: The URL of the file to download.
-- `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it  otherwise, the file is downloaded into the given path.
+- `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it  otherwise, the file is downloaded into the given path.\
 - `segments`: The number of segments the file should be divided in multi-threaded download. The default value is 10.
 - `display`: Whether to display download progress and other optional messages. The default value is `True`.
 - `multithread`: Whether to use multi-threaded download. The default value is `True`.
@@ -69,12 +73,14 @@ Each option is explained below:
 - `retries`: The number of times to retry the download in case of an error. The default value is 0.
 - `mirror_func`: A function to get a new download URL in case of an error.
 - `etag`: Whether to validate etag before resuming downloads. The default value is `True`.
+- `overwrite`: Whether to overwrite the file if it already exists. The default value is `False`.
 
 ### Examples
 
-Here is an example that demonstrates how to use pypdl library to download a file using headers, proxies and authentication:
+Here is an example that demonstrates how to use pypdl library to download a file using headers, proxies, timeout and authentication:
 
 ```py
+import aiohttp
 from pypdl import Pypdl
 
 def main():
@@ -88,8 +94,11 @@ def main():
     # Using authentication
     auth = ("user","pass")
 
+    # Using timeout
+    timeout = aiohttp.ClientTimeout(sock_read=20)
+
     # create a new pypdl object
-    dl = Pypdl(headers=headers, proxies=proxies, auth=auth)
+    dl = Pypdl(headers=headers, proxies=proxies, timeout=timeout, auth=auth)
 
     # start the download
     dl.start(
@@ -174,6 +183,31 @@ if dl.completed:
   else:
       print('Hash is invalid')
 ```
+An example of using Pypdl object with `allow_reuse` set to `True`:
+
+```py
+from pypdl import Pypdl
+
+urls = [
+    'https://example.com/file1.zip',
+    'https://example.com/file2.zip',
+    'https://example.com/file3.zip',
+    'https://example.com/file4.zip',
+    'https://example.com/file5.zip',
+]
+
+# create a pypdl object
+dl = Pypdl(allow_reuse=True)
+
+for url in urls:
+    dl.start(url, block=True)
+
+# shutdown the downloader, this is essential when allow_reuse is enabled
+dl.shutdown()
+
+```
+
+
 An example of using `PypdlFactory` to download multiple files concurrently:
 
 ```py
@@ -182,9 +216,11 @@ from pypdl import PypdlFactory
 proxies = {"http": "http://10.10.1.10:3128", "https": "https://10.10.1.10:1080"}
 
 # create a PypdlFactory object
-factory = PypdlFactory(instances=5, proxies=proxies)
+factory = PypdlFactory(instances=5, allow_reuse=True, proxies=proxies)
 
-# list of tasks to be downloaded
+# List of tasks to be downloaded. Each task is a tuple of (URL, {Pypdl arguments}).
+# - URL: The download link (string).
+# - {Pypdl arguments}: A dictionary of arguments supported by `Pypdl`.
 tasks = [
     ('https://example.com/file1.zip', {'file_path': 'file1.zip'}),
     ('https://example.com/file2.zip', {'file_path': 'file2.zip'}),
@@ -215,6 +251,20 @@ for url, result in results:
         print(f'{url} - Hash is valid')
     else:
         print(f'{url} - Hash is invalid')
+
+task2 = [
+    ('https://example.com/file6.zip', {'file_path': 'file6.zip'}),
+    ('https://example.com/file7.zip', {'file_path': 'file7.zip'}),
+    ('https://example.com/file8.zip', {'file_path': 'file8.zip'}),
+    ('https://example.com/file9.zip', {'file_path': 'file9.zip'}),
+    ('https://example.com/file10.zip', {'file_path': 'file10.zip'}),
+]
+
+# start the download process
+factory.start(task2, display=True, block=True)
+
+# shutdown the downloader, this is essential when allow_reuse is enabled
+factory.shutdown()
 ```
 ## API Reference
 
@@ -222,17 +272,9 @@ for url, result in results:
 
 The `Pypdl` class represents a file downloader that can download a file from a given URL to a specified file path. The class supports both single-threaded and multi-threaded downloads and many other features like retry download incase of failure and option to continue downloading using a different url if necessary, pause/resume functionality, progress tracking etc.
 
-#### Keyword Arguments
-
-- `params`: (dict, Optional) A dictionary, list of tuples or bytes to send as a query string. Default is None.
-- `allow_redirects`: (bool, Optional) A Boolean to enable/disable redirection. Default is True.
-- `auth`: (tuple, Optional) A tuple to enable a certain HTTP authentication. Default is None.
-- `cert`: (str or tuple, Optional) A String or Tuple specifying a cert file or key. Default is None.
-- `cookies`: (dict, Optional) A dictionary of cookies to send to the specified url. Default is None.
-- `headers`: (dict, Optional) A dictionary of HTTP headers to send to the specified url. Default is None.
-- `proxies`: (dict, Optional) A dictionary of the protocol to the proxy url. Default is None.
-- `timeout`: (number or tuple, Optional) A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 20 seconds.
-- `verify`: (bool or str, Optional) A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
+#### Arguments
+- `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `Pypdl` object for next download. The default value is `False`.It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
+- Additional keyword arguments supported by [`aiohttp.ClientSession`](https://docs.aiohttp.org/en/stable/client_advanced.html#client-session).
 
 #### Attributes
 
@@ -261,30 +303,27 @@ The `Pypdl` class represents a file downloader that can download a file from a g
     - `retries`: (int, Optional) The number of times to retry the download in case of an error.
     - `mirror_func`: (function, Optional) A function to get a new download URL in case of an error.
     - `etag`: (bool, Optional) Whether to validate etag before resuming downloads.
+    - `overwrite`: (bool, Optional) Whether to overwrite the file if it already exists.
 
     ##### Returns
     
-    - `AutoShutdownFuture`: If `block` is `False`.
+    - `AutoShutdownFuture`: If `block` and `allow_reuse` is  set to `False`.
+    - `concurrent.futures.Future`: If `block` is `False` and `allow_reuse` is `True`.
     - `FileValidator`: If `block` is `True` and the download is successful.
     - `None`: If `block` is `True` and the download fails.
 
 - `stop()`: Stops the download process.
+- `shutdown()`: Shuts down the downloader.
 
 ### `PypdlFactory()`
 
 The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. It allows for concurrent downloads and provides progress tracking across all active downloads.
 
-#### Keyword Arguments
+#### Arguments
 
-- `params`: (dict, Optional) A dictionary, list of tuples or bytes to send as a query string. Default is None.
-- `allow_redirects`: (bool, Optional) A Boolean to enable/disable redirection. Default is True.
-- `auth`: (tuple, Optional) A tuple to enable a certain HTTP authentication. Default is None.
-- `cert`: (str or tuple, Optional) A String or Tuple specifying a cert file or key. Default is None.
-- `cookies`: (dict, Optional) A dictionary of cookies to send to the specified url. Default is None.
-- `headers`: (dict, Optional) A dictionary of HTTP headers to send to the specified url. Default is None.
-- `proxies`: (dict, Optional) A dictionary of the protocol to the proxy url. Default is None.
-- `timeout`: (number or tuple, Optional) A number, or a tuple, indicating how many seconds to wait for the client to make a connection and/or send a response. Default is 10 seconds.
-- `verify`: (bool or str, Optional) A Boolean or a String indication to verify the servers TLS certificate or not. Default is True.
+- `instances`: (int, Optional) The number of `Pypdl` instances to create. The default value is 5.
+- `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `PypdlFactory` objects for next download. The default value is `False`. It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
+
 
 #### Attributes
 
@@ -293,7 +332,6 @@ The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. I
 - `time_spent`: The total time spent downloading across all active downloads, in seconds.
 - `current_size`: The total amount of data downloaded so far across all active downloads, in bytes.
 - `total`: The total number of download tasks.
-- `eta`: The estimated time remaining for all active downloads to complete, in the format "HH:MM:SS".
 - `completed`: A list of tuples where each tuple contains the URL of the download and the result of the download.
 - `failed`: A list of URLs for which the download failed.
 - `remaining`: A list of remaining download tasks.
@@ -310,10 +348,12 @@ The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. I
 
     ##### Returns
 
-    - `AutoShutdownFuture`: If `block` is `False`. This is a future object that can be used to check the status of the downloads.
+    - `AutoShutdownFuture`: If `block` and `allow_reuse` is  set to `False`.
+    - `concurrent.futures.Future`: If `block` is `False` and `allow_reuse` is `True`.
     - `list`: If `block` is `True`. This is a list of tuples where each tuple contains the URL of the download and the result of the download.
 
 - `stop()`: Stops all active downloads.
+- `shutdown()`: Shuts down the factory.
 
 ### Helper Classes
 
@@ -325,45 +365,28 @@ The `Basicdown` class is the base downloader class that provides the basic struc
 
 - `curr`: The current size of the downloaded file in bytes.
 - `completed`: A flag that indicates if the download is complete.
-- `id`: The ID of the current instance.
-- `stop`: An event that can be used to stop the download process.
-- `error`: An event that can be used to signal an error.
+- `interrupt`: A flag that indicates if the download was interrupted.
+- `downloaded`: The total amount of data downloaded so far in bytes.
 
 ##### Methods
 
-- `download(url, path, mode, **kwargs)`: Downloads data in chunks.
+- `download(url, path, mode, session, **kwargs)`: Downloads data in chunks.
 
 #### `Simpledown()`
 
 The `Simpledown` class extends `Basicdown` and is responsible for downloading a whole file in a single segment.
 
-##### Parameters
-
-- `url`: Url of the file.
-- `file_path`: Path to save the file.
-- `stop`: Stop event.
-- `error`: Error event.
-- `**kwargs`: Additional keyword arguments.
-
 ##### Methods
 
-- `worker()`: Downloads a whole file in a single segment.
+- `worker(url, file_path, session, **kwargs)`: Downloads a whole file in a single segment.
 
 #### `Multidown()`
 
 The `Multidown` class extends `Basicdown` and is responsible for downloading a specific segment of a file.
 
-##### Parameters
-
-- `segement_table`: Dictionary that contains the download information.
-- `segment_id`: ID of the download part.
-- `stop`: Stop event.
-- `error`: Error event.
-- `**kwargs`: Additional keyword arguments.
-
 ##### Methods
 
-- `worker()`: Downloads a part of the file in multiple segments.
+- `worker(segment_table, id, session, **kwargs)`: Downloads a part of the file in multiple segments.
 
 #### `FileValidator()`
 
@@ -383,12 +406,12 @@ The `FileValidator` class is used to validate the integrity of the downloaded fi
 
 #### `AutoShutdownFuture()`
 
-The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object that shuts down the executor when the result is retrieved.
+The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object that shuts down a list of associated executors when the result is retrieved.
 
 ##### Parameters
 
 - `future`: The Future object to be wrapped.
-- `executor`: The executor to be shut down when the result is retrieved.
+- `executors`: The list of executors to be shut down when the result is retrieved.
 
 ##### Methods
 

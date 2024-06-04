@@ -1,7 +1,7 @@
 import logging
 
-from .factory import Factory
-from .manager import DownloadManager
+from factory import Factory
+from manager import DownloadManager
 
 handler = logging.FileHandler("pypdl.log", mode="a", delay=True)
 handler.setFormatter(

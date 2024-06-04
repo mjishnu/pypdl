@@ -9,8 +9,8 @@ from typing import Callable, Optional, Union
 
 import aiohttp
 
-from .downloader import Multidown, Simpledown
-from .utls import (
+from downloader import Multidown, Simpledown
+from utls import (
     AutoShutdownFuture,
     FileValidator,
     ScreenCleaner,
@@ -24,7 +24,7 @@ from .utls import (
 
 
 class DownloadManager:
-    def __init__(self, allow_reuse=False, **kwargs):
+    def __init__(self, allow_reuse: bool = False, **kwargs):
         self._pool = ThreadPoolExecutor(max_workers=2)
         self._workers = []
         self._status = 0
@@ -43,168 +43,6 @@ class DownloadManager:
         self.remaining = None
         self.failed = False
         self.completed = False
-
-    def _reset(self):
-        self._workers.clear()
-        self._interrupt.clear()
-        self._stop = False
-
-        self.size = None
-        self.progress = 0
-        self.speed = 0
-        self.time_spent = 0
-        self.current_size = 0
-        self.eta = "99:59:59"
-        self.remaining = None
-        self.failed = False
-        self.completed = False
-
-    def _calc_values(self, recent_queue, interval):
-        self.current_size = sum(worker.curr for worker in self._workers)
-
-        # Speed calculation
-        recent_queue.append(sum(worker.downloaded for worker in self._workers))
-        non_zero_list = [to_mb(value) for value in recent_queue if value]
-        if len(non_zero_list) < 1:
-            self.speed = 0
-        elif len(non_zero_list) == 1:
-            self.speed = non_zero_list[0] / interval
-        else:
-            diff = [b - a for a, b in zip(non_zero_list, non_zero_list[1:])]
-            self.speed = (sum(diff) / len(diff)) / interval
-
-        if self.size:
-            self.progress = int((self.current_size / self.size) * 100)
-            self.remaining = to_mb(self.size - self.current_size)
-
-            if self.speed:
-                self.eta = seconds_to_hms(self.remaining / self.speed)
-            else:
-                self.eta = "99:59:59"
-
-    def _display(self, download_mode):
-        cursor_up()
-
-        if self.size:
-            progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
-            info = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
-            print(progress_bar + info)
-        else:
-            download_stats = "Downloading... \n"
-            info = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s "
-            print(download_stats + info)
-
-    async def _single_thread(self, url, file_path):
-        sd = Simpledown(self._interrupt)
-        self._workers.append(sd)
-        async with aiohttp.ClientSession() as session:
-            try:
-                await sd.worker(url, file_path, session)
-            except Exception as e:
-                logging.error("(%s) [%s]", e.__class__.__name__, e)
-                self._interrupt.set()
-
-    async def _multi_thread(self, segments, segment_table):
-        tasks = []
-        async with aiohttp.ClientSession() as session:
-            for segment in range(segments):
-                md = Multidown(self._interrupt)
-                self._workers.append(md)
-                tasks.append(
-                    asyncio.create_task(
-                        md.worker(segment_table, segment, session, **self._kwargs)
-                    )
-                )
-            try:
-                await asyncio.gather(*tasks)
-            except Exception as e:
-                self._interrupt.set()
-                logging.error("(%s) [%s]", e.__class__.__name__, e)
-
-    async def _get_header(self, url):
-        kwargs = self._kwargs.copy()
-        kwargs.pop("params", None)
-
-        async with aiohttp.ClientSession() as session:
-            async with session.head(url, **kwargs) as response:
-                if response.status == 200:
-                    return response.headers
-
-            async with session.get(url, **self._kwargs) as response:
-                if response.status == 200:
-                    return response.headers
-
-        self._interrupt.set()
-        raise ConnectionError(
-            f"Server Returned: {response.reason}({response.status}), Invalid URL"
-        )
-
-    def _get_info(self, url, file_path, multisegment, etag):
-        header = asyncio.run(self._get_header(url))
-        file_path = get_filepath(url, header, file_path)
-        if size := int(header.get("content-length", 0)):
-            self.size = size
-
-        etag = header.get("etag", not etag)  # since we check truthiness of etag
-
-        if isinstance(etag, str):
-            etag = etag.strip('"')
-
-        if not self.size or not header.get("accept-ranges"):
-            multisegment = False
-
-        return file_path, multisegment, etag
-
-    def _execute(
-        self, url, file_path, segments, display, multisegment, etag, overwrite
-    ):
-        start_time = time.time()
-
-        file_path, multisegment, etag = self._get_info(
-            url, file_path, multisegment, etag
-        )
-
-        if not overwrite and Path(file_path).exists():
-            self._status = 1
-            self.completed = True
-            return FileValidator(file_path)
-
-        if multisegment:
-            segment_table = create_segment_table(
-                url, file_path, segments, self.size, etag
-            )
-            segments = segment_table["segments"]
-
-            self._pool.submit(
-                lambda: asyncio.run(self._multi_thread(segments, segment_table))
-            )
-        else:
-            self._pool.submit(lambda: asyncio.run(self._single_thread(url, file_path)))
-
-        recent_queue = deque([0] * 12, maxlen=12)
-        download_mode = "Multi-Segment" if multisegment else "Single-Segment"
-        interval = 0.5
-        self._status = 1
-        with ScreenCleaner(display):
-            while True:
-                status = sum(worker.completed for worker in self._workers)
-                self._calc_values(recent_queue, interval)
-
-                if display:
-                    self._display(download_mode)
-
-                if self._interrupt.is_set():
-                    self.time_spent = time.time() - start_time
-                    return None
-
-                if status and status == len(self._workers):
-                    if multisegment:
-                        combine_files(file_path, segments)
-                    self.completed = True
-                    self.time_spent = time.time() - start_time
-                    return FileValidator(file_path)
-
-                time.sleep(interval)
 
     def start(
         self,
@@ -293,3 +131,164 @@ class DownloadManager:
     def shutdown(self) -> None:
         """Shutdown the download manager."""
         self._pool.shutdown()
+
+    def _reset(self):
+        self._workers.clear()
+        self._interrupt.clear()
+        self._stop = False
+
+        self.size = None
+        self.progress = 0
+        self.speed = 0
+        self.time_spent = 0
+        self.current_size = 0
+        self.eta = "99:59:59"
+        self.remaining = None
+        self.failed = False
+        self.completed = False
+
+    def _execute(
+        self, url, file_path, segments, display, multisegment, etag, overwrite
+    ):
+        start_time = time.time()
+
+        file_path, multisegment, etag = self._get_info(
+            url, file_path, multisegment, etag
+        )
+
+        if not overwrite and Path(file_path).exists():
+            self._status = 1
+            self.completed = True
+            return FileValidator(file_path)
+
+        if multisegment:
+            segment_table = create_segment_table(
+                url, file_path, segments, self.size, etag
+            )
+            segments = segment_table["segments"]
+
+            self._pool.submit(
+                lambda: asyncio.run(self._multi_thread(segments, segment_table))
+            )
+        else:
+            self._pool.submit(lambda: asyncio.run(self._single_thread(url, file_path)))
+
+        recent_queue = deque([0] * 12, maxlen=12)
+        download_mode = "Multi-Segment" if multisegment else "Single-Segment"
+        interval = 0.5
+        self._status = 1
+        with ScreenCleaner(display):
+            while True:
+                status = sum(worker.completed for worker in self._workers)
+                self._calc_values(recent_queue, interval)
+
+                if display:
+                    self._display(download_mode)
+
+                if self._interrupt.is_set():
+                    self.time_spent = time.time() - start_time
+                    return None
+
+                if status and status == len(self._workers):
+                    if multisegment:
+                        combine_files(file_path, segments)
+                    self.completed = True
+                    self.time_spent = time.time() - start_time
+                    return FileValidator(file_path)
+
+                time.sleep(interval)
+
+    def _get_info(self, url, file_path, multisegment, etag):
+        header = asyncio.run(self._get_header(url))
+        file_path = get_filepath(url, header, file_path)
+        if size := int(header.get("content-length", 0)):
+            self.size = size
+
+        etag = header.get("etag", not etag)  # since we check truthiness of etag
+
+        if isinstance(etag, str):
+            etag = etag.strip('"')
+
+        if not self.size or not header.get("accept-ranges"):
+            multisegment = False
+
+        return file_path, multisegment, etag
+
+    async def _get_header(self, url):
+        kwargs = self._kwargs.copy()
+        kwargs.pop("params", None)
+
+        async with aiohttp.ClientSession() as session:
+            async with session.head(url, **kwargs) as response:
+                if response.status == 200:
+                    return response.headers
+
+            async with session.get(url, **self._kwargs) as response:
+                if response.status == 200:
+                    return response.headers
+
+        self._interrupt.set()
+        raise ConnectionError(
+            f"Server Returned: {response.reason}({response.status}), Invalid URL"
+        )
+
+    async def _multi_thread(self, segments, segment_table):
+        tasks = []
+        async with aiohttp.ClientSession() as session:
+            for segment in range(segments):
+                md = Multidown(self._interrupt)
+                self._workers.append(md)
+            try:
+                tasks.append(
+                    asyncio.create_task(
+                        md.worker(segment_table, segment, session, **self._kwargs)
+                    )
+                )
+                await asyncio.gather(*tasks)
+            except Exception as e:
+                self._interrupt.set()
+                logging.error("(%s) [%s]", e.__class__.__name__, e)
+
+    async def _single_thread(self, url, file_path):
+        sd = Simpledown(self._interrupt)
+        self._workers.append(sd)
+        async with aiohttp.ClientSession() as session:
+            try:
+                await sd.worker(url, file_path, session)
+            except Exception as e:
+                logging.error("(%s) [%s]", e.__class__.__name__, e)
+                self._interrupt.set()
+
+    def _calc_values(self, recent_queue, interval):
+        self.current_size = sum(worker.curr for worker in self._workers)
+
+        # Speed calculation
+        recent_queue.append(sum(worker.downloaded for worker in self._workers))
+        non_zero_list = [to_mb(value) for value in recent_queue if value]
+        if len(non_zero_list) < 1:
+            self.speed = 0
+        elif len(non_zero_list) == 1:
+            self.speed = non_zero_list[0] / interval
+        else:
+            diff = [b - a for a, b in zip(non_zero_list, non_zero_list[1:])]
+            self.speed = (sum(diff) / len(diff)) / interval
+
+        if self.size:
+            self.progress = int((self.current_size / self.size) * 100)
+            self.remaining = to_mb(self.size - self.current_size)
+
+            if self.speed:
+                self.eta = seconds_to_hms(self.remaining / self.speed)
+            else:
+                self.eta = "99:59:59"
+
+    def _display(self, download_mode):
+        cursor_up()
+        if self.size:
+            progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
+            info = f"Total: {to_mb(self.size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
+            print(progress_bar + info)
+        else:
+            download_stats = "Downloading... \n"
+            info = f"Downloaded: {to_mb(self.current_size):.2f} MB, Download Mode: {download_mode}, Speed: {self.speed:.2f} MB/s "
+            print(download_stats + info)

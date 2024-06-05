@@ -30,8 +30,11 @@ class DownloadManager:
         self._status = 0
         self._interrupt = Event()
         self._stop = False
-        self._kwargs = {"timeout": aiohttp.ClientTimeout(sock_read=60)}
-        self._kwargs.update({**kwargs, "raise_for_status": True})
+        self._kwargs = {
+            "timeout": aiohttp.ClientTimeout(sock_read=60),
+            "raise_for_status": True,
+        }
+        self._kwargs.update(kwargs)
         self._allow_reuse = allow_reuse
 
         self.size = None
@@ -215,22 +218,14 @@ class DownloadManager:
         return file_path, multisegment, etag
 
     async def _get_header(self, url):
-        kwargs = self._kwargs.copy()
-        kwargs.update({"raise_for_status": False})
-
         async with aiohttp.ClientSession() as session:
-            async with session.head(url, **kwargs) as response:
+            async with session.head(url, **self._kwargs) as response:
                 if response.status == 200:
                     return response.headers
 
             async with session.get(url, **self._kwargs) as response:
                 if response.status == 200:
                     return response.headers
-
-        self._interrupt.set()
-        raise ConnectionError(
-            f"Server Returned: {response.reason}({response.status}), Invalid URL"
-        )
 
     async def _multi_segment(self, segments, segment_table):
         tasks = []

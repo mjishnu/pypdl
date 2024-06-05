@@ -15,7 +15,7 @@ from .utls import (
 
 
 class Factory:
-    def __init__(self, instances: int = 2, allow_reuse=False, **kwargs):
+    def __init__(self, instances: int = 2, allow_reuse: bool = False, **kwargs):
         self._instances = [Pypdl(True, **kwargs) for _ in range(instances)]
         self._allow_reuse = allow_reuse
         self._pool = ThreadPoolExecutor(max_workers=2)

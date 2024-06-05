@@ -65,7 +65,7 @@ dl.start(
 Each option is explained below:
 - `allow_reuse`: Whether to allow reuse of existing Pypdl object for next download. The default value is `False`. 
 - `url`: The URL of the file to download.
-- `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it  otherwise, the file is downloaded into the given path.\
+- `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it  otherwise, the file is downloaded into the given path.
 - `segments`: The number of segments the file should be divided in multi-segmented download. The default value is 10.
 - `display`: Whether to display download progress and other optional messages. The default value is `True`.
 - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
@@ -274,7 +274,20 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 
 #### Arguments
 - `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `Pypdl` object for next download. The default value is `False`.It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
-- Additional keyword arguments supported by [`aiohttp.ClientSession`](https://docs.aiohttp.org/en/stable/client_advanced.html#client-session).
+- Additional keyword arguments 
+    - `params` (default `None`): Parameters to be sent in the query string of the new request.
+    - `data` (default `None`): The data to send in the body of the request.
+    - `json` (default `None`): A JSON-compatible Python object to send in the body of the request.
+    - `cookies` (default `None`): HTTP Cookies to send with the request.
+    - `headers` (default `None`): HTTP Headers to send with the request.
+    - `auth` (default `None`): An object that represents HTTP Basic Authorization.
+    - `allow_redirects` (default `True`): If set to False, do not follow redirects.
+    - `max_redirects` (default `10`): Maximum number of redirects to follow.
+    - `proxy` (default `None`): Proxy URL.
+    - `proxy_auth` (default `None`): An object that represents proxy HTTP Basic Authorization.
+    - `timeout` (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout.
+    - `ssl` (default `None`): SSL validation mode.
+    - `proxy_headers` (default `None`): HTTP headers to send to the proxy if the `proxy` parameter has been provided.
 
 #### Attributes
 
@@ -323,6 +336,20 @@ The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. I
 
 - `instances`: (int, Optional) The number of `Pypdl` instances to create. The default value is 5.
 - `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `PypdlFactory` objects for next download. The default value is `False`. It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
+- Additional keyword arguments 
+    - `params` (default `None`): Parameters to be sent in the query string of the new request.
+    - `data` (default `None`): The data to send in the body of the request.
+    - `json` (default `None`): A JSON-compatible Python object to send in the body of the request.
+    - `cookies` (default `None`): HTTP Cookies to send with the request.
+    - `headers` (default `None`): HTTP Headers to send with the request.
+    - `auth` (default `None`): An object that represents HTTP Basic Authorization.
+    - `allow_redirects` (default `True`): If set to False, do not follow redirects.
+    - `max_redirects` (default `10`): Maximum number of redirects to follow.
+    - `proxy` (default `None`): Proxy URL.
+    - `proxy_auth` (default `None`): An object that represents proxy HTTP Basic Authorization.
+    - `timeout` (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout.
+    - `ssl` (default `None`): SSL validation mode.
+    - `proxy_headers` (default `None`): HTTP headers to send to the proxy if the `proxy` parameter has been provided.
 
 
 #### Attributes

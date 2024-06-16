@@ -4,7 +4,7 @@ import sys
 import time
 from concurrent.futures import Executor, Future
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Union, List
 from urllib.parse import unquote, urlparse
 
 MEGABYTE = 1048576
@@ -130,7 +130,7 @@ class FileValidator:
 class AutoShutdownFuture:
     """A Future object wrapper that shuts down the executors when the result is retrieved."""
 
-    def __init__(self, future: Future, executors: list[Executor]):
+    def __init__(self, future: Future, executors: List[Executor]):
         self.future = future
         self.executors = executors
 

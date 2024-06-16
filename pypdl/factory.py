@@ -216,6 +216,6 @@ class Factory:
             info = f"Total: {completed}/{self.total}, Downloaded: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s "
             print(progress_bar + info)
         else:
-            download_stats = f"Downloading...{" " * 95}\n"
+            download_stats = f"Downloading...{' ' * 95}\n"
             info = f"Total: {completed}/{self.total}, Downloaded: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s "
             print(download_stats + info)

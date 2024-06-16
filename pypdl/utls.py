@@ -74,7 +74,7 @@ def create_segment_table(
 
     for segment in range(segments):
         start = partition_size * segment
-        end = partition_size * (segment + 1) - 1
+        end = partition_size * (segment + 1) - 1  # since range is inclusive
 
         if segment == segments - 1:
             end += add_bytes

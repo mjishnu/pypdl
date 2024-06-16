@@ -249,7 +249,7 @@ class DownloadManager:
             sd = Simpledown(self._interrupt)
             self._workers.append(sd)
             try:
-                await sd.worker(url, file_path, session)
+                await sd.worker(url, file_path, session, **self._kwargs)
             except Exception as e:
                 logging.error("(%s) [%s]", e.__class__.__name__, e)
                 self._interrupt.set()

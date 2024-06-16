@@ -67,3 +67,7 @@ class Multidown(Basicdown):
 
         if self.curr == size:
             self.completed = True
+        else:
+            raise Exception(
+                f"Incorrect segment size: expected {size} bytes, received {self.curr} bytes"
+            )

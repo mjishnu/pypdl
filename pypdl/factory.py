@@ -1,7 +1,7 @@
-import logging
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from logging import Logger, getLogger
 from typing import Union
 
 from .manager import DownloadManager as Pypdl
@@ -9,14 +9,24 @@ from .utls import (
     AutoShutdownFuture,
     ScreenCleaner,
     cursor_up,
+    default_logger,
     seconds_to_hms,
     to_mb,
 )
 
 
 class Factory:
-    def __init__(self, instances: int = 2, allow_reuse: bool = False, **kwargs):
-        self._instances = [Pypdl(True, **kwargs) for _ in range(instances)]
+    def __init__(
+        self,
+        instances: int = 2,
+        allow_reuse: bool = False,
+        logger: Logger = default_logger("PypdlFactory"),
+        **kwargs,
+    ):
+        self._instances = [
+            Pypdl(True, getLogger(f"PypdlFactory.instance-{i}"), **kwargs)
+            for i in range(instances)
+        ]
         self._allow_reuse = allow_reuse
         self._pool = ThreadPoolExecutor(max_workers=2)
         self._stop = False
@@ -35,6 +45,7 @@ class Factory:
         self.completed = []
         self.failed = []
         self.remaining = []
+        self.logger = logger
 
     def start(
         self, tasks: list, display: bool = True, block: bool = True
@@ -53,6 +64,7 @@ class Factory:
             list: If `block` is True. This is a list of tuples where each tuple contains the URL of the download and the result of the download.
         """
         self._reset()
+        self.logger.debug("Downloading %s files", len(tasks))
         if self._allow_reuse:
             future = self._pool.submit(self._execute, tasks, display)
         else:
@@ -70,6 +82,7 @@ class Factory:
     def stop(self) -> None:
         """Stops all active downloads."""
         with self._stop_lock:
+            self.logger.debug("Initiating download stop")
             self._lock.set()
             self._stop = True
         for instance in self._instances:
@@ -77,12 +90,15 @@ class Factory:
         while self._lock.is_set():
             time.sleep(0.5)
         time.sleep(1)
+        self.logger.debug("Download stopped")
 
     def shutdown(self) -> None:
         """Shutdown the factory."""
+        self.logger.debug("Shutting down factory")
         for instance in self._instances:
             instance.shutdown()
         self._pool.shutdown()
+        self.logger.debug("Factory shutdown")
 
     def _reset(self):
         self._stop = False
@@ -93,6 +109,7 @@ class Factory:
         self.completed.clear()
         self.failed.clear()
         self.remaining.clear()
+        self.logger.debug("Reseted download factory")
 
     def _execute(self, tasks, display):
         start_time = time.time()
@@ -106,8 +123,10 @@ class Factory:
 
         self._pool.submit(self._compute, display)
 
+        self.logger.debug("Initiated waiting loop")
         while len(self.completed) + len(self.failed) != self.total:
             if self._stop:
+                self.logger.debug("Exit waiting loop, download interrupted")
                 break
 
             for future in as_completed(futures):
@@ -121,11 +140,13 @@ class Factory:
                 self._manage_remaining(instance, futures)
 
         self.time_spent = time.time() - start_time
+        self.logger.debug("Processed final task, clearing lock")
         self._lock.clear()
-
+        self.logger.debug("Exit waiting loop, download completed")
         return self.completed
 
     def _add_future(self, instance, task, futures):
+        self.logger.debug("Adding new task")
         url, *kwargs = task
         instance._status = None
         kwargs = kwargs[0] if kwargs else {}
@@ -134,8 +155,10 @@ class Factory:
         futures[future] = (instance, url)
         while instance._status is None:
             time.sleep(0.1)
+        self.logger.debug("Added new task: %s", url)
 
     def _handle_completed(self, instance, curr_url, result):
+        self.logger.debug("Handling completed download, setting lock")
         self._lock.set()
         if instance.size:
             self._completed_size += instance.size
@@ -143,28 +166,35 @@ class Factory:
             self._prog = False
         self._completed_prog += int((1 / self.total) * 100)
         self.completed.append((curr_url, result))
+        self.logger.debug("Download completed: %s", curr_url)
 
     def _handle_failed(self, curr_url):
+        self.logger.debug("Handling failed download, setting lock")
         self._lock.set()
         self.failed.append(curr_url)
-        logging.error("Download failed: %s", curr_url)
+        self.logger.error("Download failed: %s", curr_url)
 
     def _manage_remaining(self, instance, futures):
         with self._stop_lock:
             if self._stop:
+                self.logger.debug("Stop Initiated, removing instance from running")
                 self._running.remove(instance)
                 return
 
             if self.remaining:
+                self.logger.debug("Remaining tasks: %s", len(self.remaining))
                 self._add_future(instance, self.remaining.pop(0), futures)
             else:
+                self.logger.debug("No remaining tasks, removing instance from running")
                 self._running.remove(instance)
 
             if len(self.completed) + len(self.failed) != self.total:
+                self.logger.debug("Not final task, releasing lock")
                 self._lock.clear()
                 time.sleep(0.5)
 
     def _compute(self, display):
+        self.logger.debug("Starting download computation")
         with ScreenCleaner(display):
             while True:
                 if not self._lock.is_set():
@@ -185,6 +215,7 @@ class Factory:
             if display:
                 self._display()
                 print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
+            self.logger.debug("Computation ended")
 
     def _calc_values(self):
         def sum_attribute(instances, attribute):

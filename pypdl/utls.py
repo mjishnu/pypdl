@@ -1,10 +1,11 @@
 import hashlib
 import json
+import logging
 import sys
 import time
 from concurrent.futures import Executor, Future
 from pathlib import Path
-from typing import Dict, Union, List
+from typing import Dict, List, Union
 from urllib.parse import unquote, urlparse
 
 MEGABYTE = 1048576
@@ -107,6 +108,21 @@ def combine_files(file_path: str, segments: int) -> None:
 
     progress_file = Path(f"{file_path}.json")
     progress_file.unlink()
+
+
+def default_logger(name: str) -> logging.Logger:
+    """Creates a default debugging logger."""
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.ERROR)
+    handler = logging.FileHandler("pypdl.log", mode="a", delay=True)
+    handler.setFormatter(
+        logging.Formatter(
+            "(%(name)s)  %(asctime)s - %(levelname)s: %(message)s",
+            datefmt="%d-%m-%y %H:%M:%S",
+        )
+    )
+    logger.addHandler(handler)
+    return logger
 
 
 class FileValidator:

@@ -1,8 +1,8 @@
 import asyncio
-import logging
 import time
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
+from logging import Logger
 from pathlib import Path
 from threading import Event
 from typing import Callable, Optional, Union
@@ -17,6 +17,7 @@ from .utls import (
     combine_files,
     create_segment_table,
     cursor_up,
+    default_logger,
     get_filepath,
     seconds_to_hms,
     to_mb,
@@ -24,7 +25,12 @@ from .utls import (
 
 
 class DownloadManager:
-    def __init__(self, allow_reuse: bool = False, **kwargs):
+    def __init__(
+        self,
+        allow_reuse: bool = False,
+        logger: Logger = default_logger("Pypdl"),
+        **kwargs,
+    ):
         self._pool = ThreadPoolExecutor(max_workers=2)
         self._workers = []
         self._status = 0
@@ -46,6 +52,7 @@ class DownloadManager:
         self.remaining = None
         self.failed = False
         self.completed = False
+        self.logger = logger
 
     def start(
         self,
@@ -86,10 +93,10 @@ class DownloadManager:
             for i in range(retries + 1):
                 try:
                     _url = mirror_func() if i > 0 and callable(mirror_func) else url
-                    if i > 0:
-                        logging.info("Retrying... (%d/%d)", i, retries)
-
                     self._reset()
+
+                    self.logger.debug("Downloading, url: %s attempt: %s", _url, (i + 1))
+
                     result = self._execute(
                         _url,
                         file_path,
@@ -108,10 +115,11 @@ class DownloadManager:
                     time.sleep(3)
 
                 except Exception as e:
-                    logging.error("(%s) [%s]", e.__class__.__name__, e)
+                    self.logger.error("(%s) [%s]", e.__class__.__name__, e)
 
             self._status = 1
             self.failed = True
+            self.logger.debug("Download failed, url: %s", _url)
             return None
 
         if self._allow_reuse:
@@ -130,10 +138,12 @@ class DownloadManager:
         self._interrupt.set()
         self._stop = True
         time.sleep(1)
+        self.logger.debug("Download stoped")
 
     def shutdown(self) -> None:
         """Shutdown the download manager."""
         self._pool.shutdown()
+        self.logger.debug("Shutdown download manger")
 
     def _reset(self):
         self._workers.clear()
@@ -149,6 +159,7 @@ class DownloadManager:
         self.remaining = None
         self.failed = False
         self.completed = False
+        self.logger.debug("Reseted download manager")
 
     def _execute(
         self, url, file_path, segments, display, multisegment, etag, overwrite
@@ -162,12 +173,15 @@ class DownloadManager:
         if not overwrite and Path(file_path).exists():
             self._status = 1
             self.completed = True
+            self.time_spent = time.time() - start_time
+            self.logger.debug("File already exists, download completed")
             return FileValidator(file_path)
 
         if multisegment:
             segment_table = create_segment_table(
                 url, file_path, segments, self.size, etag
             )
+            self.logger.debug("Segment table created: %s", str(segment_table))
             segments = segment_table["segments"]
 
             self._pool.submit(
@@ -180,6 +194,7 @@ class DownloadManager:
         download_mode = "Multi-Segment" if multisegment else "Single-Segment"
         interval = 0.5
         self._status = 1
+        self.logger.debug("Initiated waiting loop")
         with ScreenCleaner(display):
             while True:
                 status = sum(worker.completed for worker in self._workers)
@@ -190,13 +205,16 @@ class DownloadManager:
 
                 if self._interrupt.is_set():
                     self.time_spent = time.time() - start_time
+                    self.logger.debug("Exit waiting loop, download interrupted")
                     return None
 
                 if status and status == len(self._workers):
                     if multisegment:
+                        self.logger.debug("Combining files")
                         combine_files(file_path, segments)
                     self.completed = True
                     self.time_spent = time.time() - start_time
+                    self.logger.debug("Exit waiting loop, download completed")
                     return FileValidator(file_path)
 
                 time.sleep(interval)
@@ -205,14 +223,17 @@ class DownloadManager:
         header = asyncio.run(self._get_header(url))
         file_path = get_filepath(url, header, file_path)
         if size := int(header.get("content-length", 0)):
+            self.logger.debug("Size accquired from header")
             self.size = size
 
         etag = header.get("etag", not etag)  # since we check truthiness of etag
 
         if isinstance(etag, str):
+            self.logger.debug("ETag accquired from header")
             etag = etag.strip('"')
 
         if not self.size or not header.get("accept-ranges"):
+            self.logger.debug("Single segment download, accept-ranges header not found")
             multisegment = False
 
         return file_path, multisegment, etag
@@ -221,14 +242,17 @@ class DownloadManager:
         async with aiohttp.ClientSession() as session:
             async with session.head(url, **self._kwargs) as response:
                 if response.status == 200:
+                    self.logger.debug("Header accquired from head request")
                     return response.headers
 
             async with session.get(url, **self._kwargs) as response:
                 if response.status == 200:
+                    self.logger.debug("Header accquired from get request")
                     return response.headers
 
     async def _multi_segment(self, segments, segment_table):
         tasks = []
+        self.logger.debug("Multi-Segment download started")
         async with aiohttp.ClientSession() as session:
             for segment in range(segments):
                 md = Multidown(self._interrupt)
@@ -240,18 +264,21 @@ class DownloadManager:
                 )
             try:
                 await asyncio.gather(*tasks)
+                self.logger.debug("Downloaded all segments")
             except Exception as e:
-                logging.error("(%s) [%s]", e.__class__.__name__, e)
+                self.logger.error("(%s) [%s]", e.__class__.__name__, e)
                 self._interrupt.set()
 
     async def _single_segment(self, url, file_path):
+        self.logger.debug("Single-Segment download started")
         async with aiohttp.ClientSession() as session:
             sd = Simpledown(self._interrupt)
             self._workers.append(sd)
             try:
                 await sd.worker(url, file_path, session, **self._kwargs)
+                self.logger.debug("Downloaded single segement")
             except Exception as e:
-                logging.error("(%s) [%s]", e.__class__.__name__, e)
+                self.logger.error("(%s) [%s]", e.__class__.__name__, e)
                 self._interrupt.set()
 
     def _calc_values(self, recent_queue, interval):

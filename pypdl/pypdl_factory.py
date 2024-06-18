@@ -4,7 +4,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from logging import Logger, getLogger
 from typing import Union
 
-from .manager import DownloadManager as Pypdl
+from .pypdl_manager import Pypdl
 from .utls import (
     AutoShutdownFuture,
     ScreenCleaner,
@@ -15,7 +15,13 @@ from .utls import (
 )
 
 
-class Factory:
+class PypdlFactory:
+    """
+    A factory class for managing multiple instances of the Pypdl downloader.
+
+    This class also supports additional keyword arguments specified in the documentation.
+    """
+
     def __init__(
         self,
         instances: int = 2,

@@ -1,9 +1,11 @@
 from setuptools import setup, find_packages
 
-VERSION = "1.4.1"
-DESCRIPTION = "A concurrent python download manager"
+DESCRIPTION = "A concurrent pure python download manager"
 with open("README.md", "r") as f:
     LONG_DESCRIPTION = f.read()
+
+with open("pypdl/__init__.py", "r") as f:
+    VERSION = f.readline().split("=")[1].strip().strip("\"'")
 
 setup(
     name="pypdl",

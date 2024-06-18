@@ -9,7 +9,7 @@ from typing import Callable, Optional, Union
 
 import aiohttp
 
-from .downloader import Multidown, Simpledown
+from .downloader import Multidown, Singledown
 from .utls import (
     AutoShutdownFuture,
     FileValidator,
@@ -24,7 +24,13 @@ from .utls import (
 )
 
 
-class DownloadManager:
+class Pypdl:
+    """
+    A multi-segment file downloader that supports progress tracking, retries, pause/resume functionality etc.
+
+    This class also supports additional keyword arguments specified in the documentation.
+    """
+
     def __init__(
         self,
         allow_reuse: bool = False,
@@ -270,7 +276,7 @@ class DownloadManager:
     async def _single_segment(self, url, file_path):
         self.logger.debug("Single-Segment download started")
         async with aiohttp.ClientSession() as session:
-            sd = Simpledown(self._interrupt)
+            sd = Singledown(self._interrupt)
             self._workers.append(sd)
             try:
                 await sd.worker(url, file_path, session, **self._kwargs)

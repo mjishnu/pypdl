@@ -416,9 +416,9 @@ The `Basicdown` class is the base downloader class that provides the basic struc
 
 - `download(url, path, mode, session, **kwargs)`: Downloads data in chunks.
 
-#### `Simpledown()`
+#### `Singledown()`
 
-The `Simpledown` class extends `Basicdown` and is responsible for downloading a whole file in a single segment.
+The `Singledown` class extends `Basicdown` and is responsible for downloading a whole file in a single segment.
 
 ##### Methods
 

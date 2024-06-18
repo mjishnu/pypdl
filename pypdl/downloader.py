@@ -30,7 +30,7 @@ class Basicdown:
                         break
 
 
-class Simpledown(Basicdown):
+class Singledown(Basicdown):
     """Class for downloading the whole file in a single segment."""
 
     async def worker(

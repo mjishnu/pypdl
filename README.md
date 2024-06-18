@@ -47,7 +47,7 @@ The `Pypdl` object provides additional options for advanced usage:
 ```py
 from pypdl import Pypdl
 
-dl = Pypdl(allow_reuse=False)
+dl = Pypdl(allow_reuse=False, logger=default_logger("Pypdl"))
 dl.start(
     url='http://example.com/file.txt',
     file_path='file.txt',
@@ -63,7 +63,8 @@ dl.start(
 ```
 
 Each option is explained below:
-- `allow_reuse`: Whether to allow reuse of existing Pypdl object for next download. The default value is `False`. 
+- `allow_reuse`: Whether to allow reuse of existing Pypdl object for next download. The default value is `False`.
+- `logger`: A logger object to log messages. The default value is custom `Logger` with the name *Pypdl*.
 - `url`: The URL of the file to download.
 - `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it  otherwise, the file is downloaded into the given path.
 - `segments`: The number of segments the file should be divided in multi-segmented download. The default value is 10.
@@ -119,13 +120,16 @@ if __name__ == '__main__':
 
 This example downloads a file from the internet using 10 segments and displays the download progress. If the download fails, it will retry up to 3 times. we are also using headers, proxies and authentication.
 
-Another example of implementing pause resume functionality and printing the progress to console:
+Another example of implementing pause resume functionality, printing the progress to console and changing log level to debug:
 
 ```py
 from pypdl import Pypdl
 
 # create a pypdl object
 dl = Pypdl()
+
+# changing log level to debug
+dl.logger.setLevel('DEBUG')
 
 # start the download process
 # block=False so we can print the progress
@@ -183,9 +187,10 @@ if dl.completed:
   else:
       print('Hash is invalid')
 ```
-An example of using Pypdl object with `allow_reuse` set to `True`:
+An example of using Pypdl object with `allow_reuse` set to `True` and custom logger:
 
 ```py
+import logging
 from pypdl import Pypdl
 
 urls = [
@@ -196,8 +201,11 @@ urls = [
     'https://example.com/file5.zip',
 ]
 
+# create a custom logger
+logger = logging.getLogger('custom')
+
 # create a pypdl object
-dl = Pypdl(allow_reuse=True)
+dl = Pypdl(allow_reuse=True, logger=logger)
 
 for url in urls:
     dl.start(url, block=True)
@@ -274,21 +282,26 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 
 #### Arguments
 - `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `Pypdl` object for next download. The default value is `False`.It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
-- Additional keyword arguments 
-    - `params` (default `None`): Parameters to be sent in the query string of the new request.
-    - `data` (default `None`): The data to send in the body of the request.
-    - `json` (default `None`): A JSON-compatible Python object to send in the body of the request.
-    - `cookies` (default `None`): HTTP Cookies to send with the request.
-    - `headers` (default `None`): HTTP Headers to send with the request.
-    - `auth` (default `None`): An object that represents HTTP Basic Authorization.
-    - `allow_redirects` (default `True`): If set to False, do not follow redirects.
-    - `max_redirects` (default `10`): Maximum number of redirects to follow.
-    - `proxy` (default `None`): Proxy URL.
-    - `proxy_auth` (default `None`): An object that represents proxy HTTP Basic Authorization.
-    - `timeout` (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout.
-    - `ssl` (default `None`): SSL validation mode.
-    - `proxy_headers` (default `None`): HTTP headers to send to the proxy if the `proxy` parameter has been provided.
 
+- `logger`: (logging.Logger, Optional) A logger object to log messages. The default value is custom `Logger` with the name *Pypdl*.
+
+- Supported Keyword Arguments:
+    - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
+    - `data`: The data to send in the body of the request. The default value is `None`.
+    - `json`: A JSON-compatible Python object to send in the body of the request. The default value is `None`.
+    - `cookies`: HTTP Cookies to send with the request. The default value is `None`.
+    - `headers`: HTTP Headers to send with the request. The default value is `None`.
+    - `auth`: An object that represents HTTP Basic Authorization. The default value is `None`.
+    - `allow_redirects`: If set to False, do not follow redirects. The default value is `True`.
+    - `max_redirects`: Maximum number of redirects to follow. The default value is `10`.
+    - `proxy`: Proxy URL. The default value is `None`.
+    - `proxy_auth`: An object that represents proxy HTTP Basic Authorization. The default value is `None`.
+    - `timeout`: (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout. The default value is `aiohttp.ClientTimeout(sock_read=60)`.
+    - `ssl`: SSL validation mode. The default value is `None`.
+    - `proxy_headers`: HTTP headers to send to the proxy if the `proxy` parameter has been provided. The default value is `None`.
+
+    For detailed information on each parameter, refer the [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_reference.html#aiohttp.ClientSession.request). Please ensure that only the *supported keyword arguments* are used. Using unsupported or irrelevant keyword arguments may lead to unexpected behavior or errors.
+    
 #### Attributes
 
 - `size`: The total size of the file to be downloaded, in bytes.
@@ -336,21 +349,25 @@ The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. I
 
 - `instances`: (int, Optional) The number of `Pypdl` instances to create. The default value is 5.
 - `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `PypdlFactory` objects for next download. The default value is `False`. It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
-- Additional keyword arguments 
-    - `params` (default `None`): Parameters to be sent in the query string of the new request.
-    - `data` (default `None`): The data to send in the body of the request.
-    - `json` (default `None`): A JSON-compatible Python object to send in the body of the request.
-    - `cookies` (default `None`): HTTP Cookies to send with the request.
-    - `headers` (default `None`): HTTP Headers to send with the request.
-    - `auth` (default `None`): An object that represents HTTP Basic Authorization.
-    - `allow_redirects` (default `True`): If set to False, do not follow redirects.
-    - `max_redirects` (default `10`): Maximum number of redirects to follow.
-    - `proxy` (default `None`): Proxy URL.
-    - `proxy_auth` (default `None`): An object that represents proxy HTTP Basic Authorization.
-    - `timeout` (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout.
-    - `ssl` (default `None`): SSL validation mode.
-    - `proxy_headers` (default `None`): HTTP headers to send to the proxy if the `proxy` parameter has been provided.
 
+- `logger`: (logging.Logger, Optional) A logger object to log messages. The default value is custom `Logger` with the name *PypdlFactory*.
+
+- Supported Keyword Arguments:
+    - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
+    - `data`: The data to send in the body of the request. The default value is `None`.
+    - `json`: A JSON-compatible Python object to send in the body of the request. The default value is `None`.
+    - `cookies`: HTTP Cookies to send with the request. The default value is `None`.
+    - `headers`: HTTP Headers to send with the request. The default value is `None`.
+    - `auth`: An object that represents HTTP Basic Authorization. The default value is `None`.
+    - `allow_redirects`: If set to False, do not follow redirects. The default value is `True`.
+    - `max_redirects`: Maximum number of redirects to follow. The default value is `10`.
+    - `proxy`: Proxy URL. The default value is `None`.
+    - `proxy_auth`: An object that represents proxy HTTP Basic Authorization. The default value is `None`.
+    - `timeout`: (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout. The default value is `aiohttp.ClientTimeout(sock_read=60)`.
+    - `ssl`: SSL validation mode. The default value is `None`.
+    - `proxy_headers`: HTTP headers to send to the proxy if the `proxy` parameter has been provided. The default value is `None`.
+
+    For detailed information on each parameter, refer the [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_reference.html#aiohttp.ClientSession.request). Please ensure that only the *supported keyword arguments* are used. Using unsupported or irrelevant keyword arguments may lead to unexpected behavior or errors.
 
 #### Attributes
 

@@ -94,9 +94,7 @@ class DownloadManager:
                 try:
                     _url = mirror_func() if i > 0 and callable(mirror_func) else url
                     self._reset()
-
                     self.logger.debug("Downloading, url: %s attempt: %s", _url, (i + 1))
-
                     result = self._execute(
                         _url,
                         file_path,

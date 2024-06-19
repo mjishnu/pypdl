@@ -187,10 +187,11 @@ if dl.completed:
   else:
       print('Hash is invalid')
 ```
-An example of using Pypdl object with `allow_reuse` set to `True` and custom logger:
+An example of using Pypdl object to get size of the files with `allow_reuse` set to `True` and custom logger:
 
 ```py
 import logging
+import time
 from pypdl import Pypdl
 
 urls = [
@@ -204,12 +205,27 @@ urls = [
 # create a custom logger
 logger = logging.getLogger('custom')
 
+size = []
+
 # create a pypdl object
 dl = Pypdl(allow_reuse=True, logger=logger)
 
 for url in urls:
-    dl.start(url, block=True)
+    dl.start(url, block=False)
 
+    # waiting for the size and other preliminary data to be retrived
+    while dl.wait:
+        time.sleep(0.1)
+    
+    # get the size of the file and add it to size list
+    size.append(dl.size)
+
+    # do something 
+
+    while not dl.completed:
+        print(dl.progress)
+
+print(size)
 # shutdown the downloader, this is essential when allow_reuse is enabled
 dl.shutdown()
 
@@ -313,6 +329,8 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 - `remaining`: The amount of data remaining to be downloaded, in bytes.
 - `failed`: A flag that indicates if the download failed.
 - `completed`: A flag that indicates if the download is complete.
+- `wait`: A flag indicating whether preliminary information (e.g., file size) has been retrieved.
+- `logger`: The logger object used for logging messages.
 
 #### Methods
 
@@ -379,6 +397,7 @@ The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. I
 - `completed`: A list of tuples where each tuple contains the URL of the download and the result of the download.
 - `failed`: A list of URLs for which the download failed.
 - `remaining`: A list of remaining download tasks.
+- `logger`: The logger object used for logging messages.
 
 #### Methods
 

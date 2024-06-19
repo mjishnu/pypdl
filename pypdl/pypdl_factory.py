@@ -154,12 +154,11 @@ class PypdlFactory:
     def _add_future(self, instance, task, futures):
         self.logger.debug("Adding new task")
         url, *kwargs = task
-        instance._status = None
         kwargs = kwargs[0] if kwargs else {}
         kwargs.update({"block": False, "display": False, "overwrite": False})
         future = instance.start(url, **kwargs)
         futures[future] = (instance, url)
-        while instance._status is None:
+        while instance.wait:
             time.sleep(0.1)
         self.logger.debug("Added new task: %s", url)
 

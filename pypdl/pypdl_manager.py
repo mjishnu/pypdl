@@ -39,7 +39,6 @@ class Pypdl:
     ):
         self._pool = ThreadPoolExecutor(max_workers=2)
         self._workers = []
-        self._status = 0
         self._interrupt = Event()
         self._stop = False
         self._kwargs = {
@@ -58,6 +57,7 @@ class Pypdl:
         self.remaining = None
         self.failed = False
         self.completed = False
+        self.wait = True
         self.logger = logger
 
     def start(
@@ -99,7 +99,6 @@ class Pypdl:
             for i in range(retries + 1):
                 try:
                     _url = mirror_func() if i > 0 and callable(mirror_func) else url
-                    self._reset()
                     self.logger.debug("Downloading, url: %s attempt: %s", _url, (i + 1))
                     result = self._execute(
                         _url,
@@ -116,16 +115,18 @@ class Pypdl:
                             print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
                         return result
 
+                    self._reset()
                     time.sleep(3)
 
                 except Exception as e:
                     self.logger.error("(%s) [%s]", e.__class__.__name__, e)
 
-            self._status = 1
+            self.wait = False
             self.failed = True
             self.logger.debug("Download failed, url: %s", _url)
             return None
 
+        self._reset()
         if self._allow_reuse:
             future = self._pool.submit(download)
         else:
@@ -163,6 +164,7 @@ class Pypdl:
         self.remaining = None
         self.failed = False
         self.completed = False
+        self.wait = True
         self.logger.debug("Reseted download manager")
 
     def _execute(
@@ -175,7 +177,7 @@ class Pypdl:
         )
 
         if not overwrite and Path(file_path).exists():
-            self._status = 1
+            self.wait = False
             self.completed = True
             self.time_spent = time.time() - start_time
             self.logger.debug("File already exists, download completed")
@@ -197,7 +199,7 @@ class Pypdl:
         recent_queue = deque([0] * 12, maxlen=12)
         download_mode = "Multi-Segment" if multisegment else "Single-Segment"
         interval = 0.5
-        self._status = 1
+        self.wait = False
         self.logger.debug("Initiated waiting loop")
         with ScreenCleaner(display):
             while True:

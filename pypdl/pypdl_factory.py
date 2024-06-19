@@ -169,7 +169,7 @@ class PypdlFactory:
             self._completed_size += instance.size
         else:
             self._prog = False
-        self._completed_prog += int((1 / self.total) * 100)
+        self._completed_prog += (1 / self.total) * 100
         self.completed.append((curr_url, result))
         self.logger.debug("Download completed: %s", curr_url)
 
@@ -215,7 +215,7 @@ class PypdlFactory:
                         break
                 time.sleep(0.5)
 
-            self.progress = self._completed_prog
+            self.progress = round(self._completed_prog)
             self.current_size = self._completed_size
             if display:
                 self._display()
@@ -232,10 +232,9 @@ class PypdlFactory:
         if self._running:
             self.speed = average_attribute(self._running, "speed", len(self._running))
 
-            self.progress = (
-                average_attribute(self._running, "progress", self.total)
-                + self._completed_prog
-            )
+            self.progress = average_attribute(
+                self._running, "progress", self.total
+            ) + int(self._completed_prog)
             self.current_size = (
                 sum_attribute(self._running, "current_size") + self._completed_size
             )

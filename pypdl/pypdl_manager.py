@@ -119,7 +119,7 @@ class Pypdl:
                     time.sleep(3)
 
                 except Exception as e:
-                    self.logger.error("(%s) [%s]", e.__class__.__name__, e)
+                    self.logger.exception("(%s) [%s]", e.__class__.__name__, e)
 
             self.wait = False
             self.failed = True
@@ -272,7 +272,7 @@ class Pypdl:
                 await asyncio.gather(*tasks)
                 self.logger.debug("Downloaded all segments")
             except Exception as e:
-                self.logger.error("(%s) [%s]", e.__class__.__name__, e)
+                self.logger.exception("(%s) [%s]", e.__class__.__name__, e)
                 self._interrupt.set()
 
     async def _single_segment(self, url, file_path):
@@ -284,7 +284,7 @@ class Pypdl:
                 await sd.worker(url, file_path, session, **self._kwargs)
                 self.logger.debug("Downloaded single segement")
             except Exception as e:
-                self.logger.error("(%s) [%s]", e.__class__.__name__, e)
+                self.logger.exception("(%s) [%s]", e.__class__.__name__, e)
                 self._interrupt.set()
 
     def _calc_values(self, recent_queue, interval):

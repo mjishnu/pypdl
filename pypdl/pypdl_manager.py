@@ -256,6 +256,10 @@ class Pypdl:
                     self.logger.debug("Header acquired from get request")
                     return response.headers
 
+        raise Exception(
+            f"Failed to get header (Status: {response.status}, Reason: {response.reason})"
+        )
+
     async def _multi_segment(self, segments, segment_table):
         tasks = []
         self.logger.debug("Multi-Segment download started")

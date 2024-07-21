@@ -60,6 +60,9 @@ class Multidown(Basicdown):
             else:
                 self.curr = downloaded_size
 
+        if kwargs.get("headers") is not None:
+            kwargs["headers"] = kwargs["headers"].copy()
+
         if self.curr < size:
             start = start + self.curr
             kwargs.setdefault("headers", {}).update({"range": f"bytes={start}-{end}"})

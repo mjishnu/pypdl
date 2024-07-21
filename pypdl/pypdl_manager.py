@@ -143,12 +143,12 @@ class Pypdl:
         self._interrupt.set()
         self._stop = True
         time.sleep(1)
-        self.logger.debug("Download stoped")
+        self.logger.debug("Download stopped")
 
     def shutdown(self) -> None:
         """Shutdown the download manager."""
         self._pool.shutdown()
-        self.logger.debug("Shutdown download manger")
+        self.logger.debug("Shutdown download manager")
 
     def _reset(self):
         self._workers.clear()
@@ -165,7 +165,7 @@ class Pypdl:
         self.failed = False
         self.completed = False
         self.wait = True
-        self.logger.debug("Reseted download manager")
+        self.logger.debug("Reset download manager")
 
     def _execute(
         self, url, file_path, segments, display, multisegment, etag, overwrite
@@ -229,13 +229,13 @@ class Pypdl:
         header = asyncio.run(self._get_header(url))
         file_path = get_filepath(url, header, file_path)
         if size := int(header.get("content-length", 0)):
-            self.logger.debug("Size accquired from header")
+            self.logger.debug("Size acquired from header")
             self.size = size
 
         etag = header.get("etag", not etag)  # since we check truthiness of etag
 
         if isinstance(etag, str):
-            self.logger.debug("ETag accquired from header")
+            self.logger.debug("ETag acquired from header")
             etag = etag.strip('"')
 
         if not self.size or not header.get("accept-ranges"):
@@ -248,12 +248,12 @@ class Pypdl:
         async with aiohttp.ClientSession() as session:
             async with session.head(url, **self._kwargs) as response:
                 if response.status == 200:
-                    self.logger.debug("Header accquired from head request")
+                    self.logger.debug("Header acquired from head request")
                     return response.headers
 
             async with session.get(url, **self._kwargs) as response:
                 if response.status == 200:
-                    self.logger.debug("Header accquired from get request")
+                    self.logger.debug("Header acquired from get request")
                     return response.headers
 
     async def _multi_segment(self, segments, segment_table):
@@ -282,7 +282,7 @@ class Pypdl:
             self._workers.append(sd)
             try:
                 await sd.worker(url, file_path, session, **self._kwargs)
-                self.logger.debug("Downloaded single segement")
+                self.logger.debug("Downloaded single segment")
             except Exception as e:
                 self.logger.exception("(%s) [%s]", e.__class__.__name__, e)
                 self._interrupt.set()

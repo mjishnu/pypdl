@@ -11,7 +11,7 @@ setup(
     name="pypdl",
     version=VERSION,
     author="mjishnu",
-    author_email="<mjishnu@skiff.com>",
+    author_email="<mjishnu@proton.me>",
     description=DESCRIPTION,
     long_description_content_type="text/markdown",
     long_description=LONG_DESCRIPTION,

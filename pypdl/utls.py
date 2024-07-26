@@ -36,7 +36,9 @@ def get_filepath(url: str, headers: Dict, file_path: str) -> str:
         filename = content_disposition[filename_start:]  # Get name from headers
         filename = unquote(filename.strip('"'))  # Decode URL encodings
     else:
-        filename = unquote(urlparse(url).path.split("/")[-1])  # Generate name from url
+        filename = unquote(urlparse(url).path.split("/")[-1])  # Generate name from URL
+
+    filename = filename.replace("/", "_")
 
     if file_path:
         file_path = Path(file_path)

@@ -77,7 +77,7 @@ class Pypdl:
         Start the download process.
 
         Parameters:
-            url (str): The URL to download from.
+            url (Callable[[], str], Required): This can either be the URL of the file to download or a function that returns the URL.
             file_path (str, Optional): The path to save the downloaded file. If not provided, the file is saved in the current working directory.
                 If `file_path` is a directory, the file is saved in that directory. If `file_path` is a file name, the file is saved with that name.
             segments (int, Optional): The number of segments to divide the file into for multi-segment download. Default is 10.
@@ -127,6 +127,8 @@ class Pypdl:
             return None
 
         self._reset()
+        url = url() if callable(url) else url
+
         if self._allow_reuse:
             future = self._pool.submit(download)
         else:

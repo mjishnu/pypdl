@@ -65,7 +65,7 @@ dl.start(
 Each option is explained below:
 - `allow_reuse`: Whether to allow reuse of existing Pypdl object for next download. The default value is `False`.
 - `logger`: A logger object to log messages. The default value is custom `Logger` with the name *Pypdl*.
-- `url`: The URL of the file to download.
+- `url`: This can either be the URL of the file to download or a function that returns the URL.
 - `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it  otherwise, the file is downloaded into the given path.
 - `segments`: The number of segments the file should be divided in multi-segmented download. The default value is 10.
 - `display`: Whether to display download progress and other optional messages. The default value is `True`.
@@ -157,16 +157,20 @@ while not d.completed:
 
 This example we start the download process and print the progress to console. We then stop the download process and do something else. After that we resume the download process and print the rest of the progress to console. This can be used to create a pause/resume functionality.
 
-Another example of using hash validation:
+Another example of using hash validation with dynamic url:
 
 ```py
 from pypdl import Pypdl
+
+# Generate the url dynamically
+def dynamic_url():
+    return 'https://example.com/file.zip'
 
 # create a pypdl object
 dl = Pypdl()
 
 # if block = True --> returns a FileValidator object
-file = dl.start('https://example.com/file.zip', block=True) 
+file = dl.start(dynamic_url, block=True) 
 
 # validate hash
 if file.validate_hash(correct_hash,'sha256'):
@@ -174,8 +178,8 @@ if file.validate_hash(correct_hash,'sha256'):
 else:
     print('Hash is invalid')
 
-# if block = False --> returns a AutoShutdownFuture object
-file = dl.start('https://example.com/file.zip', block=False)
+# scenario where block = False --> returns a AutoShutdownFuture object
+file = dl.start(dynamic_url, block=False)
 
 # do something
 # ...
@@ -338,7 +342,7 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 
     ##### Parameters
 
-    - `url`: (str) The download URL.
+    - `url`: ((str, function), Required) This can either be the URL of the file to download or a function that returns the URL.
     - `file_path`: (str, Optional) The optional file path to save the download. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded with the given name.
     - `segments`: (int, Optional) The number of segments the file should be divided into for multi-segmented download.
     - `display`: (bool, Optional) Whether to display download progress and other optional messages.

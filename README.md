@@ -78,7 +78,7 @@ Each option is explained below:
 
 ### Examples
 
-Here is an example that demonstrates how to use pypdl library to download a file using headers, proxies, timeout and authentication:
+Here is an example that demonstrates how to use pypdl library to download a file using headers, proxy and timeout:
 
 ```py
 import aiohttp
@@ -87,19 +87,13 @@ from pypdl import Pypdl
 def main():
     # Using headers
     headers = {"User-Agent":"Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0"}
-    # Using proxies
-    proxies = {
-                    "http": "http://10.10.1.10:3128",
-                    "https": "https://10.10.1.10:1080",
-                }
-    # Using authentication
-    auth = ("user","pass")
-
+    # Using proxy
+    proxy = "http://user:pass@some.proxy.com"
     # Using timeout
     timeout = aiohttp.ClientTimeout(sock_read=20)
 
     # create a new pypdl object
-    dl = Pypdl(headers=headers, proxies=proxies, timeout=timeout, auth=auth)
+    dl = Pypdl(headers=headers, proxy=proxy, timeout=timeout)
 
     # start the download
     dl.start(
@@ -118,7 +112,7 @@ if __name__ == '__main__':
     main()
 ```
 
-This example downloads a file from the internet using 10 segments and displays the download progress. If the download fails, it will retry up to 3 times. we are also using headers, proxies and authentication.
+This example downloads a file from the internet using 10 segments and displays the download progress. If the download fails, it will retry up to 3 times. we are also using headers, proxy and timeout, For more info regarding these parameters refer [API reference](https://github.com/mjishnu/pypdl?tab=readme-ov-file#pypdl-1)
 
 Another example of implementing pause resume functionality, printing the progress to console and changing log level to debug:
 
@@ -241,10 +235,10 @@ An example of using `PypdlFactory` to download multiple files concurrently:
 ```py
 from pypdl import PypdlFactory
 
-proxies = {"http": "http://10.10.1.10:3128", "https": "https://10.10.1.10:1080"}
+proxy = "http://user:pass@some.proxy.com"
 
 # create a PypdlFactory object
-factory = PypdlFactory(instances=5, allow_reuse=True, proxies=proxies)
+factory = PypdlFactory(instances=5, allow_reuse=True, proxy=proxy)
 
 # List of tasks to be downloaded. Each task is a tuple of (URL, {Pypdl arguments}).
 # - URL: The download link (string).
@@ -294,6 +288,7 @@ factory.start(task2, display=True, block=True)
 # shutdown the downloader, this is essential when allow_reuse is enabled
 factory.shutdown()
 ```
+For more detailed info about parameters refer [API reference](https://github.com/mjishnu/pypdl?tab=readme-ov-file#pypdlfactory)
 ## API Reference
 
 ### `Pypdl()`

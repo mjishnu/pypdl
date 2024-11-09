@@ -166,6 +166,7 @@ class ScreenCleaner:
         self.display = display
 
     def clear(self) -> None:
+        sys.stdout.write("\n")
         sys.stdout.write("\033c")  # Clear screen
         sys.stdout.write("\x1b[?25l")  # Hide cursor
 

@@ -64,35 +64,62 @@ class Pypdl:
         self,
         url: str,
         file_path: Optional[str] = None,
-        segments: int = 10,
-        display: bool = True,
         multisegment: bool = True,
-        block: bool = True,
+        segments: int = 10,
+        overwrite: bool = True,
+        etag: bool = True,
         retries: int = 0,
         mirror_func: Optional[Callable[[], str]] = None,
-        etag: bool = True,
-        overwrite: bool = True,
+        display: bool = True,
+        clear_terminal: bool = True,
+        block: bool = True,
     ) -> Union[AutoShutdownFuture, Future, FileValidator, None]:
         """
         Start the download process.
 
         Parameters:
-            url (Callable[[], str], Required): This can either be the URL of the file to download or a function that returns the URL.
-            file_path (str, Optional): The path to save the downloaded file. If not provided, the file is saved in the current working directory.
-                If `file_path` is a directory, the file is saved in that directory. If `file_path` is a file name, the file is saved with that name.
-            segments (int, Optional): The number of segments to divide the file into for multi-segment download. Default is 10.
-            display (bool, Optional): Whether to display download progress and other messages. Default is True.
-            multisegment (bool, Optional): Whether to use multi-Segment download. Default is True.
-            block (bool, Optional): Whether to block the function until the download is complete. Default is True.
-            retries (int, Optional): The number of times to retry the download if it fails. Default is 0.
-            mirror_func (Callable[[], str], Optional): A function that returns a new download URL if the download fails. Default is None.
-            etag (bool, Optional): Whether to validate the ETag before resuming downloads. Default is True.
-            overwrite (bool, Optional): Whether to overwrite the file if it already exists. Default is True.
+
+            url (str or Callable[[], str], required):
+                The URL of the file to download, or a function that returns the URL.
+
+            file_path (str, optional):
+                The path to save the downloaded file.
+                    If not provided, the file is saved in the current working directory with its original name.
+                    If `file_path` is a directory, the file is saved in that directory with its original name.
+                    If `file_path` is a file name, the file is saved with that name.
+
+            multisegment (bool, optional):
+                Whether to use multi-segment download. Default is `True`.
+
+            segments (int, optional):
+                The number of segments to divide the file into for multi-segment download. Default is `10`.
+
+            overwrite (bool, optional):
+                Whether to overwrite the file if it already exists. Default is `True`.
+
+            etag (bool, optional):
+                Whether to validate the ETag before resuming downloads. Default is `True`.
+
+            retries (int, optional):
+                The number of times to retry the download if it fails. Default is `0`.
+
+            mirror_func (Callable[[], str], optional):
+                A function that returns a new download URL if the download fails. Default is `None`.
+
+            display (bool, optional):
+                Whether to display download progress and other messages. Default is `True`.
+
+            clear_terminal (bool, optional):
+                Whether to clear the terminal before displaying the download progress. Default is `True`.
+
+            block (bool, optional):
+                Whether to block the function until the download is complete. Default is `True`.
 
         Returns:
-            AutoShutdownFuture: If `block` is False.
-            FileValidator: If `block` is True and the download successful.
-            None: If `block` is True and the download fails.
+            AutoShutdownFuture: If `block` is `False`.
+            concurrent.futures.Future: If `block` is `False` and `allow_reuse` is `True`.
+            FileValidator: If `block` is `True` and the download is successful.
+            None: If `block` is `True` and the download fails.
         """
 
         def download():
@@ -103,11 +130,12 @@ class Pypdl:
                     result = self._execute(
                         _url,
                         file_path,
-                        segments,
-                        display,
                         multisegment,
-                        etag,
+                        segments,
                         overwrite,
+                        etag,
+                        display,
+                        clear_terminal,
                     )
 
                     if self._stop or self.completed:
@@ -170,7 +198,15 @@ class Pypdl:
         self.logger.debug("Reset download manager")
 
     def _execute(
-        self, url, file_path, segments, display, multisegment, etag, overwrite
+        self,
+        url,
+        file_path,
+        multisegment,
+        segments,
+        overwrite,
+        etag,
+        display,
+        clear_terminal,
     ):
         start_time = time.time()
 
@@ -203,7 +239,7 @@ class Pypdl:
         interval = 0.5
         self.wait = False
         self.logger.debug("Initiated waiting loop")
-        with ScreenCleaner(display):
+        with ScreenCleaner(display, clear_terminal):
             while True:
                 status = sum(worker.completed for worker in self._workers)
                 self._calc_values(recent_queue, interval)

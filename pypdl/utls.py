@@ -162,12 +162,14 @@ class AutoShutdownFuture:
 class ScreenCleaner:
     """A context manager to clear the screen and hide cursor."""
 
-    def __init__(self, display: bool):
+    def __init__(self, display: bool, clear_screen: bool):
         self.display = display
+        self.clear_screen = clear_screen
 
     def clear(self) -> None:
-        sys.stdout.write("\n")
-        sys.stdout.write("\033c")  # Clear screen
+        sys.stdout.write(2 * "\n")
+        if self.clear_screen:
+            sys.stdout.write("\033c")  # Clear screen
         sys.stdout.write("\x1b[?25l")  # Hide cursor
 
     def __enter__(self):

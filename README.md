@@ -51,30 +51,32 @@ dl = Pypdl(allow_reuse=False, logger=default_logger("Pypdl"))
 dl.start(
     url='http://example.com/file.txt',
     file_path='file.txt',
-    segments=10,
-    display=True,
     multisegment=True,
-    block=True,
+    segments=10,
+    overwrite=True,
+    etag=True,
     retries=0,
     mirror_func=None,
-    etag=True,
-    overwrite=False
+    display=True,
+    clear_terminal=True,
+    block=True
 )
 ```
 
 Each option is explained below:
-- `allow_reuse`: Whether to allow reuse of existing Pypdl object for next download. The default value is `False`.
-- `logger`: A logger object to log messages. The default value is custom `Logger` with the name *Pypdl*.
+- `allow_reuse`: Whether to allow reuse of existing Pypdl object for the next download. The default value is `False`.
+- `logger`: A logger object to log messages. The default value is a custom `Logger` with the name *Pypdl*.
 - `url`: This can either be the URL of the file to download or a function that returns the URL.
-- `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it  otherwise, the file is downloaded into the given path.
-- `segments`: The number of segments the file should be divided in multi-segmented download. The default value is 10.
-- `display`: Whether to display download progress and other optional messages. The default value is `True`.
+- `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded into the given path.
 - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
-- `block`: Whether to block until the download is complete. The default value is `True`.
+- `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 10.
+- `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
+- `etag`: Whether to validate the ETag before resuming downloads. The default value is `True`.
 - `retries`: The number of times to retry the download in case of an error. The default value is 0.
-- `mirror_func`: A function to get a new download URL in case of an error.
-- `etag`: Whether to validate etag before resuming downloads. The default value is `True`.
-- `overwrite`: Whether to overwrite the file if it already exists. The default value is `False`.
+- `mirror_func`: A function to get a new download URL in case of an error. The default value is `None`.
+- `display`: Whether to display download progress and other optional messages. The default value is `True`.
+- `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
+- `block`: Whether to block until the download is complete. The default value is `True`.
 
 ### Examples
 
@@ -333,20 +335,31 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 
 #### Methods
 
-- `start(url, file_path, segments=10, display=True, multisegment=True, block=True, retries=0, mirror_func=None, etag=False)`: Starts the download process.
+- `start(url,
+file_path=None,
+multisegment=True,
+segments=10,
+overwrite=True,
+etag=True,
+retries=0,
+mirror_func=None,
+display=True,
+clear_terminal=True,
+block=True)`: Starts the download process.
 
     ##### Parameters
 
-    - `url`: ((str, function), Required) This can either be the URL of the file to download or a function that returns the URL.
-    - `file_path`: (str, Optional) The optional file path to save the download. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded with the given name.
-    - `segments`: (int, Optional) The number of segments the file should be divided into for multi-segmented download.
-    - `display`: (bool, Optional) Whether to display download progress and other optional messages.
-    - `multisegment`: (bool, Optional) Whether to use multi-segmented download.
-    - `block`: (bool, Optional) Whether to block until the download is complete.
-    - `retries`: (int, Optional) The number of times to retry the download in case of an error.
-    - `mirror_func`: (function, Optional) A function to get a new download URL in case of an error.
-    - `etag`: (bool, Optional) Whether to validate etag before resuming downloads.
-    - `overwrite`: (bool, Optional) Whether to overwrite the file if it already exists.
+    - `url`: This can either be the URL of the file to download or a function that returns the URL.
+    - `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded into the given path.
+    - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
+    - `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 10.
+    - `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
+    - `etag`: Whether to validate the ETag before resuming downloads. The default value is `True`.
+    - `retries`: The number of times to retry the download in case of an error. The default value is 0.
+    - `mirror_func`: A function to get a new download URL in case of an error. The default value is `None`.
+    - `display`: Whether to display download progress and other optional messages. The default value is `True`.
+    - `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
+    - `block`: Whether to block until the download is complete. The default value is `True`.
 
     ##### Returns
     
@@ -393,26 +406,28 @@ The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. I
 - `time_spent`: The total time spent downloading across all active downloads, in seconds.
 - `current_size`: The total amount of data downloaded so far across all active downloads, in bytes.
 - `total`: The total number of download tasks.
-- `completed`: A list of tuples where each tuple contains the URL of the download and the result of the download.
+- `success`: A list of tuples where each tuple contains the URL of the download and the `FileValidator` of the download.
 - `failed`: A list of URLs for which the download failed.
 - `remaining`: A list of remaining download tasks.
+- `completed`: A flag to check if all tasks are completed.
 - `logger`: The logger object used for logging messages.
 
 #### Methods
 
-- `start(tasks, display=True, block=True)`: Starts the download process for multiple tasks.
+- `start(tasks, display=True, clear_terminal=True, block=True)`: Starts the download process for multiple tasks.
 
     ##### Parameters
 
     - `tasks`: (list) A list of tasks to be downloaded. Each task is a tuple where the first element is the URL and the second element is an optional dictionary with keyword arguments for `Pypdl` start method.
     - `display`: (bool, Optional) Whether to display download progress and other messages. Default is True.
+    - `clear_terminal`: (bool, Optional) Whether to clear the terminal before displaying the download progress. Default is True.
     - `block`: (bool, Optional) Whether to block the function until all downloads are complete. Default is True.
 
     ##### Returns
 
     - `AutoShutdownFuture`: If `block` and `allow_reuse` is  set to `False`.
     - `concurrent.futures.Future`: If `block` is `False` and `allow_reuse` is `True`.
-    - `list`: If `block` is `True`. This is a list of tuples where each tuple contains the URL of the download and the result of the download.
+    - `list`: If `block` is `True`. This is a list of tuples where each tuple contains the URL of the download and the `FileValidator` of the download.
 
 - `stop()`: Stops all active downloads.
 - `shutdown()`: Shuts down the factory.

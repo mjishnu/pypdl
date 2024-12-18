@@ -177,7 +177,7 @@ class PypdlFactory:
     def _add_future(self, instance, task, futures):
         self.logger.debug("Adding new task")
         url, *kwargs = task
-        kwargs = kwargs[0] if kwargs else {}
+        kwargs = {k: v for d in kwargs for k, v in d.items()}  # allow multiple parameters, like max_size
         kwargs.update({"block": False, "display": False, "overwrite": False})
         future = instance.start(url, **kwargs)
         futures[future] = (instance, url)

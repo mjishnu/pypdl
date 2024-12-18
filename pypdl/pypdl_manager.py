@@ -42,6 +42,7 @@ class Pypdl:
         self._interrupt = Event()
         self._stop = False
         self._kwargs = {
+            "allow_redirects": True,  # avoid redirected requests that don't get the content-length
             "timeout": aiohttp.ClientTimeout(sock_read=60),
             "raise_for_status": True,
         }
@@ -73,6 +74,7 @@ class Pypdl:
         display: bool = True,
         clear_terminal: bool = True,
         block: bool = True,
+        max_size: Optional[int] = None,
     ) -> Union[AutoShutdownFuture, Future, FileValidator, None]:
         """
         Start the download process.
@@ -115,6 +117,9 @@ class Pypdl:
             block (bool, optional):
                 Whether to block the function until the download is complete. Default is `True`.
 
+            max_size (bool, int):
+                The max number of bytes to download(video). Default is None.
+
         Returns:
             AutoShutdownFuture: If `block` is `False`.
             concurrent.futures.Future: If `block` is `False` and `allow_reuse` is `True`.
@@ -136,6 +141,7 @@ class Pypdl:
                         etag,
                         display,
                         clear_terminal,
+                        max_size,
                     )
 
                     if self._stop or self.completed:
@@ -207,11 +213,12 @@ class Pypdl:
         etag,
         display,
         clear_terminal,
+        max_size: Optional[int] = None,
     ):
         start_time = time.time()
 
         file_path, multisegment, etag = self._get_info(
-            url, file_path, multisegment, etag
+            url, file_path, multisegment, etag, max_size
         )
 
         if not overwrite and Path(file_path).exists():
@@ -263,12 +270,13 @@ class Pypdl:
 
                 time.sleep(interval)
 
-    def _get_info(self, url, file_path, multisegment, etag):
+    def _get_info(self, url, file_path, multisegment, etag, max_size: Optional[int] = None):
         header = asyncio.run(self._get_header(url))
         file_path = get_filepath(url, header, file_path)
         if size := int(header.get("content-length", 0)):
             self.logger.debug("Size acquired from header")
-            self.size = size
+            # use the smallest value of content-length and max_size
+            self.size = min(size, max_size) if max_size else size
 
         etag = header.get("etag", not etag)  # since we check truthiness of etag
 
@@ -285,12 +293,12 @@ class Pypdl:
     async def _get_header(self, url):
         async with aiohttp.ClientSession() as session:
             async with session.head(url, **self._kwargs) as response:
-                if response.status == 200:
+                if response.status < 400:  # allow success status code, like 206
                     self.logger.debug("Header acquired from head request")
                     return response.headers
 
             async with session.get(url, **self._kwargs) as response:
-                if response.status == 200:
+                if response.status < 400:
                     self.logger.debug("Header acquired from get request")
                     return response.headers
 

@@ -117,7 +117,7 @@ class Pypdl:
             block (bool, optional):
                 Whether to block the function until the download is complete. Default is `True`.
 
-            max_size (bool, int):
+            max_size (int, optional):
                 The max number of bytes to download(video). Default is None.
 
         Returns:

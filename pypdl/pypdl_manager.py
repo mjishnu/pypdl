@@ -42,7 +42,8 @@ class Pypdl:
         self._interrupt = Event()
         self._stop = False
         self._kwargs = {
-            "allow_redirects": True,  # avoid redirected requests that don't get the content-length
+            # avoid redirected requests that don't get the content-length
+            "allow_redirects": True,
             "timeout": aiohttp.ClientTimeout(sock_read=60),
             "raise_for_status": True,
         }
@@ -270,7 +271,7 @@ class Pypdl:
 
                 time.sleep(interval)
 
-    def _get_info(self, url, file_path, multisegment, etag, max_size: Optional[int] = None):
+    def _get_info(self, url, file_path, multisegment, etag, max_size=None):
         header = asyncio.run(self._get_header(url))
         file_path = get_filepath(url, header, file_path)
         if size := int(header.get("content-length", 0)):

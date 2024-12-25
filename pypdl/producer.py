@@ -3,9 +3,7 @@ import asyncio
 
 
 class Producer:
-    def __init__(self, session, logger, tasks, **kwargs):
-        self._kwargs = kwargs
-        self._kwargs.update({"raise_for_status": False})
+    def __init__(self, session, logger, tasks):
         self._size = None
 
         self.logger = logger
@@ -41,7 +39,7 @@ class Producer:
                             etag,
                             size,
                         ) = await self._fetch_task_info(
-                            task.url, task.file_path, task.multisegment
+                            task.url, task.file_path, task.multisegment, **task.kwargs
                         )
                     except asyncio.CancelledError:
                         raise
@@ -70,6 +68,10 @@ class Producer:
                                 multisegment,
                                 etag,
                                 size,
+                                task.segments,
+                                task.overwrite,
+                                task.etag_validation,
+                                task.kwargs,
                             ),
                         )
                     )
@@ -83,11 +85,11 @@ class Producer:
         self.logger.debug("Producer exited")
         return self.failed
 
-    async def _fetch_task_info(self, url, file_path, multisegment):
+    async def _fetch_task_info(self, url, file_path, multisegment, **kwargs):
         if callable(url):
             url = url()
-
-        header = await self._fetch_header(url)
+        kwargs.update({"raise_for_status": False})
+        header = await self._fetch_header(url, **kwargs)
         file_path = await get_filepath(url, header, file_path)
         if size := int(header.get("content-length", 0)):
             self.logger.debug("Size acquired from header")
@@ -103,12 +105,12 @@ class Producer:
 
         return url, file_path, multisegment, etag, size
 
-    async def _fetch_header(self, url):
-        async with self.session.head(url, **self._kwargs) as response:
+    async def _fetch_header(self, url, **kwargs):
+        async with self.session.head(url, **kwargs) as response:
             if response.status < 400:
                 self.logger.debug("Header acquired from HEAD request")
                 return response.headers
-        async with self.session.get(url, **self._kwargs) as response:
+        async with self.session.get(url, **kwargs) as response:
             if response.status < 400:
                 self.logger.debug("Header acquired from GET request")
                 return response.headers

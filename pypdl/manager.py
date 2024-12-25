@@ -29,14 +29,8 @@ class Pypdl:
         max_concurrent: int = 1,
         allow_reuse: bool = False,
         logger: Logger = default_logger("Pypdl"),
-        **kwargs,
     ):
         self._interrupt = Event()
-        self._kwargs = {
-            "timeout": aiohttp.ClientTimeout(sock_read=60),
-            "raise_for_status": True,
-        }
-        self._kwargs.update(kwargs)
         self._pool = LoggingExecutor(logger, max_workers=2)
         self._recent_queue = deque(maxlen=12)
         self._loop = TEventLoop(self._pool)
@@ -58,6 +52,7 @@ class Pypdl:
         self.eta = None
         self.total_task = None
         self.completed_task = None
+        self.task_progress = None
         self.completed = False
         self.success = []
         self.failed = []
@@ -99,17 +94,18 @@ class Pypdl:
         url: Union[Callable, str] = None,
         file_path: str = None,
         tasks: list = None,
-        overwrite: bool = True,
-        block: bool = True,
-        retries: int = 0,
         multisegment: bool = True,
         segments: int = 5,
+        retries: int = 0,
+        overwrite: bool = True,
         etag_validation: bool = True,
+        block: bool = True,
         display: bool = True,
         clear_terminal: bool = True,
+        **kwargs,
     ) -> Union[EFuture, AutoShutdownFuture]:
         if isinstance(url, str) or callable(url):
-            tasks = [(url, file_path)]
+            tasks = [{"url": url, "file_path": file_path}]
 
         if tasks is None:
             raise TypeError(
@@ -119,14 +115,20 @@ class Pypdl:
 
         task_dict = {}
         self.total_task = 0
-        for i, task in enumerate(tasks):
-            url, file_path = task + (None,) * (2 - len(task))
-            task_dict[i] = Task(url, file_path, multisegment, 0, retries + 1)
+        _kwargs = {
+            "timeout": aiohttp.ClientTimeout(sock_read=60),
+            "raise_for_status": True,
+        }
+        _kwargs.update(kwargs)
+        for i, task_kwargs in enumerate(tasks):
+            task = Task(
+                multisegment, segments, retries, overwrite, etag_validation, **_kwargs
+            )
+            task.set(**task_kwargs)
+            task_dict[i] = task
             self.total_task += 1
 
-        coro = self._download_tasks(
-            task_dict, segments, overwrite, etag_validation, display, clear_terminal
-        )
+        coro = self._download_tasks(task_dict, display, clear_terminal)
 
         self._future = EFuture(
             asyncio.run_coroutine_threadsafe(coro, self._loop.get()), self._loop
@@ -143,38 +145,27 @@ class Pypdl:
 
         return future
 
-    async def _download_tasks(
-        self,
-        tasks,
-        segments,
-        overwrite,
-        etag_validation,
-        display,
-        clear_terminal,
-    ):
+    async def _download_tasks(self, tasks_dict, display, clear_terminal):
         self._logger.debug("Starting download tasks")
         start_time = time.time()
         coroutines = []
         self._producer_queue = asyncio.Queue(self.total_task)
         self._consumer_queue = asyncio.Queue(self.total_task)
 
-        async with aiohttp.ClientSession(**self._kwargs) as session:
-            self._producer = Producer(session, self._logger, tasks, **self._kwargs)
+        async with aiohttp.ClientSession() as session:
+            self._producer = Producer(session, self._logger, tasks_dict)
             producer_task = asyncio.create_task(
                 self._producer.enqueue_tasks(self._producer_queue, self._consumer_queue)
             )
             coroutines.append(producer_task)
-            await self._producer_queue.put([key for key in tasks.keys()])
+            await self._producer_queue.put(list(tasks_dict))
 
             for _id in range(self._max_concurrent):
-                consumer = Consumer(session, self._logger, _id, **self._kwargs)
+                consumer = Consumer(session, self._logger, _id)
                 consumer_task = asyncio.create_task(
                     consumer.process_tasks(
                         self._consumer_queue,
                         self._producer_queue,
-                        segments,
-                        overwrite,
-                        etag_validation,
                     )
                 )
                 coroutines.append(consumer_task)
@@ -225,6 +216,7 @@ class Pypdl:
         self.eta = None
         self.total_task = None
         self.completed_task = None
+        self.task_progress = None
         self.completed = False
         self.success.clear()
         self.failed.clear()
@@ -243,7 +235,7 @@ class Pypdl:
     async def _completed(self):
         self._logger.debug("All downloads completed")
         await self._producer_queue.put(None)
-        for i in range(self._max_concurrent):
+        for _ in range(self._max_concurrent):
             await self._consumer_queue.put(None)
         self.completed = True
 

@@ -133,15 +133,40 @@ def default_logger(name: str) -> logging.Logger:
 
 
 class Task:
-    def __init__(self, url, file_path, multisegment, size, tries):
-        self.url = url
-        self.file_path = file_path
+    def __init__(
+        self,
+        multisegment,
+        segments,
+        tries,
+        overwrite,
+        etag_validation,
+        size=0,
+        **kwargs,
+    ):
+        self.url = None
+        self.file_path = None
         self.multisegment = multisegment
+        self.segments = segments
+        self.tries = tries + 1
+        self.overwrite = overwrite
+        self.etag_validation = etag_validation
         self.size = size
-        self.tries = tries
+        self.kwargs = kwargs
+
+    def set(self, **kwargs):
+        self.kwargs = {}
+        for key, value in kwargs.items():
+            if key == "retries":
+                key = "tries"
+                value = value + 1
+
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                self.kwargs[key] = value
 
     def __repr__(self):
-        return f"Task(url={self.url}, file_path={self.file_path}, size={self.size}, tries={self.tries})"
+        return f"Task(url={self.url}, file_path={self.file_path}, tries={self.tries}, size={self.size})"
 
 
 class TEventLoop:

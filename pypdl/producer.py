@@ -1,5 +1,6 @@
-from utils import get_filepath
 import asyncio
+
+from utils import get_filepath
 
 
 class Producer:
@@ -70,6 +71,7 @@ class Producer:
                                 size,
                                 task.segments,
                                 task.overwrite,
+                                task.speed_limit,
                                 task.etag_validation,
                                 task.kwargs,
                             ),

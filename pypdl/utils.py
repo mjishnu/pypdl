@@ -139,6 +139,7 @@ class Task:
         segments,
         tries,
         overwrite,
+        speed_limit,
         etag_validation,
         size=0,
         **kwargs,
@@ -149,6 +150,7 @@ class Task:
         self.segments = segments
         self.tries = tries + 1
         self.overwrite = overwrite
+        self.speed_limit = speed_limit
         self.etag_validation = etag_validation
         self.size = size
         self.kwargs = kwargs
@@ -170,7 +172,7 @@ class Task:
 
 
 class TEventLoop:
-    "A Threaded Eventloop"
+    """A Threaded Eventloop"""
 
     def __init__(self, executor: Executor):
         self.loop = asyncio.new_event_loop()

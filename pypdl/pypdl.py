@@ -7,19 +7,19 @@ from typing import Callable, Union
 
 import aiohttp
 
-from producer import Producer
 from consumer import Consumer
+from producer import Producer
 from utils import (
     AutoShutdownFuture,
+    EFuture,
+    LoggingExecutor,
     ScreenCleaner,
+    Task,
+    TEventLoop,
     cursor_up,
     default_logger,
     seconds_to_hms,
     to_mb,
-    LoggingExecutor,
-    TEventLoop,
-    EFuture,
-    Task,
 )
 
 
@@ -32,7 +32,6 @@ class Pypdl:
     ):
         self._interrupt = Event()
         self._pool = LoggingExecutor(logger, max_workers=2)
-        self._recent_queue = deque(maxlen=12)
         self._loop = TEventLoop(self._pool)
         self._producer = None
         self._consumers = []
@@ -98,6 +97,7 @@ class Pypdl:
         segments: int = 5,
         retries: int = 0,
         overwrite: bool = True,
+        speed_limit: float = 0,
         etag_validation: bool = True,
         block: bool = True,
         display: bool = True,
@@ -122,7 +122,13 @@ class Pypdl:
         _kwargs.update(kwargs)
         for i, task_kwargs in enumerate(tasks):
             task = Task(
-                multisegment, segments, retries, overwrite, etag_validation, **_kwargs
+                multisegment,
+                segments,
+                retries,
+                overwrite,
+                speed_limit,
+                etag_validation,
+                **_kwargs,
             )
             task.set(**task_kwargs)
             task_dict[i] = task
@@ -203,7 +209,6 @@ class Pypdl:
 
     def _reset(self) -> None:
         self._interrupt.clear()
-        self._recent_queue.clear()
         self._consumers.clear()
         self._producer = None
 
@@ -224,9 +229,10 @@ class Pypdl:
     def _progress_monitor(self, display, clear_terminal):
         self._logger.debug("Starting progress monitor")
         interval = 0.5
+        recent_queue = deque(maxlen=12)
         with ScreenCleaner(display, clear_terminal):
             while not self.completed and not self._interrupt.is_set():
-                self._calc_values(interval)
+                self._calc_values(recent_queue, interval)
                 if display:
                     self._display()
                 time.sleep(interval)
@@ -239,7 +245,7 @@ class Pypdl:
             await self._consumer_queue.put(None)
         self.completed = True
 
-    def _calc_values(self, interval):
+    def _calc_values(self, recent_queue, interval):
         self.size = self._producer.size
         self.current_size = sum(consumer.size for consumer in self._consumers)
 
@@ -250,12 +256,15 @@ class Pypdl:
         self.task_progress = int((self.completed_task / self.total_task) * 100)
 
         # Speed calculation
-        self._recent_queue.append(self.current_size)
-        if len(self._recent_queue) >= 2:
-            bytes_diff = self._recent_queue[-1] - self._recent_queue[-2]
-            self.speed = to_mb(bytes_diff) / interval
-        else:
+        recent_queue.append(self.current_size)
+        non_zero_list = [to_mb(value) for value in recent_queue if value]
+        if len(non_zero_list) < 1:
             self.speed = 0
+        elif len(non_zero_list) == 1:
+            self.speed = non_zero_list[0] / interval
+        else:
+            diff = [b - a for a, b in zip(non_zero_list, non_zero_list[1:])]
+            self.speed = (sum(diff) / len(diff)) / interval
 
         if self.size:
             self.progress = int((self.current_size / self.size) * 100)
@@ -274,6 +283,7 @@ class Pypdl:
 
     def _display(self):
         cursor_up()
+        whitespace = " "
         if self.size:
             progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
 
@@ -282,14 +292,14 @@ class Pypdl:
             else:
                 info1 = ""
 
-            info2 = f"Size: {to_mb(self.size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: {self.eta} "
-            print(progress_bar + info1 + info2)
+            info2 = f"Size: {to_mb(self.size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
+            print(progress_bar + info1 + info2 + whitespace * 35)
         else:
             if self.total_task > 1:
                 download_stats = f"[{'█' * self.task_progress}{'·' * (100 - self.task_progress)}] {self.task_progress}% \n"
             else:
-                download_stats = "Downloading... \n"
+                download_stats = f"Downloading... {whitespace * 95}\n"
 
-            info = f"Total Downloads: {self.completed_task}/{self.total_task}, Downloaded Size: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s "
+            info = f"Total Downloads: {self.completed_task}/{self.total_task}, Downloaded Size: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s"
 
-            print(download_stats + info)
+            print(download_stats + info + whitespace * 35)

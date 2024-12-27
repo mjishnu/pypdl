@@ -62,6 +62,7 @@ class Consumer:
             size,
             segments,
             overwrite,
+            speed_limit,
             etag_validation,
             kwargs,
         ) = task
@@ -77,19 +78,20 @@ class Consumer:
             segment_table = await create_segment_table(
                 url, file_path, segments, size, etag, etag_validation
             )
-            await self._multi_segment(segment_table, file_path, **kwargs)
+            await self._multi_segment(segment_table, file_path, speed_limit, **kwargs)
         else:
-            await self._single_segment(url, file_path, **kwargs)
+            await self._single_segment(url, file_path, speed_limit, **kwargs)
 
         self.success.append((url, FileValidator(file_path)))
         self.logger.debug("Download exited %s", self.id)
 
-    async def _multi_segment(self, segment_table, file_path, **kwargs):
+    async def _multi_segment(self, segment_table, file_path, speed_limit, **kwargs):
         tasks = set()
         segments = segment_table["segments"]
+        speed_limit = speed_limit / segments
         self.logger.debug("Multi-Segment download started %s", self.id)
         for segment in range(segments):
-            md = Multidown(self.session)
+            md = Multidown(self.session, speed_limit)
             self._workers.append(md)
             tasks.add(asyncio.create_task(md.worker(segment_table, segment, **kwargs)))
 
@@ -99,9 +101,9 @@ class Consumer:
         self._show_size = False
         self._downloaded_size += await os.path.getsize(file_path)
 
-    async def _single_segment(self, url, file_path, **kwargs):
+    async def _single_segment(self, url, file_path, speed_limit, **kwargs):
         self.logger.debug("Single-Segment download started %s", self.id)
-        sd = Singledown(self.session)
+        sd = Singledown(self.session, speed_limit)
         self._workers.append(sd)
         await sd.worker(url, file_path, **kwargs)
         self.logger.debug("Downloaded single segment %s", self.id)

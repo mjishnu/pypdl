@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 import aiofiles
 from aiohttp import ClientSession
 
@@ -7,16 +10,30 @@ MEGABYTE = 1048576
 class Basicdown:
     """Base downloader class."""
 
-    def __init__(self, session: ClientSession):
+    def __init__(self, session: ClientSession, speed_limit: float) -> None:
         self.session = session
+        self.speed_limit = speed_limit * MEGABYTE
         self.curr = 0
         self.completed = False
 
     async def download(self, url: str, path: str, mode: str, **kwargs) -> None:
         """Download data in chunks."""
+        speedlimit_time = time.time()
+        speedlimit_size = 0
         async with self.session.get(url, **kwargs) as response:
             async with aiofiles.open(path, mode) as file:
                 async for chunk in response.content.iter_chunked(MEGABYTE):
+                    if self.speed_limit > 0:
+                        now = time.time()
+                        time_passed = now - speedlimit_time
+                        if time_passed > 0.1:
+                            curr_download = self.curr - speedlimit_size
+                            if curr_download / time_passed >= self.speed_limit:
+                                await asyncio.sleep(curr_download / self.speed_limit)
+                            else:
+                                speedlimit_time = now
+                                speedlimit_size = self.curr
+
                     await file.write(chunk)
                     self.curr += len(chunk)
 

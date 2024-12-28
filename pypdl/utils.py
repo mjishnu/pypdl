@@ -8,6 +8,7 @@ from concurrent.futures import CancelledError, Executor, Future, ThreadPoolExecu
 from pathlib import Path
 from typing import Dict, Union
 from urllib.parse import unquote, urlparse
+from threading import Thread
 
 from aiofiles import open as fopen
 from aiofiles import os
@@ -174,9 +175,9 @@ class Task:
 class TEventLoop:
     """A Threaded Eventloop"""
 
-    def __init__(self, executor: Executor):
+    def __init__(self):
         self.loop = asyncio.new_event_loop()
-        executor.submit(self.loop.run_forever)
+        Thread(target=self.loop.run_forever, daemon=True).start()
 
     def get(self) -> asyncio.AbstractEventLoop:
         return self.loop

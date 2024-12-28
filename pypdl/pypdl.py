@@ -31,8 +31,8 @@ class Pypdl:
         logger: Logger = default_logger("Pypdl"),
     ):
         self._interrupt = Event()
-        self._pool = LoggingExecutor(logger, max_workers=2)
-        self._loop = TEventLoop(self._pool)
+        self._pool = LoggingExecutor(logger, max_workers=1)
+        self._loop = TEventLoop()
         self._producer = None
         self._consumers = []
         self._producer_queue = None
@@ -104,13 +104,21 @@ class Pypdl:
         clear_terminal: bool = True,
         **kwargs,
     ) -> Union[EFuture, AutoShutdownFuture]:
-        if isinstance(url, str) or callable(url):
-            tasks = [{"url": url, "file_path": file_path}]
+        if not self.is_idle:
+            raise RuntimeError("Pypdl already running")
+
+        if tasks and (url or file_path):
+            raise TypeError(
+                "Either provide 'tasks' or a 'url' (with optional 'file_path'), but not both."
+            )
 
         if tasks is None:
-            raise TypeError(
-                "Either 'url' (str or callable) or 'tasks' (list) must be provided"
-            )
+            if not (isinstance(url, str) or callable(url)):
+                raise TypeError(
+                    "Expected a 'url' (str or callable) when 'tasks' not provided."
+                )
+            tasks = [{"url": url, "file_path": file_path}]
+
         self._reset()
 
         task_dict = {}
@@ -139,6 +147,10 @@ class Pypdl:
         self._future = EFuture(
             asyncio.run_coroutine_threadsafe(coro, self._loop.get()), self._loop
         )
+
+        while self.is_idle:
+            self.logger.debug("waiting for download to start")
+            time.sleep(0.1)
 
         if not self._allow_reuse:
             future = AutoShutdownFuture(self._future, self._loop, self._pool)
@@ -197,8 +209,8 @@ class Pypdl:
         if self.is_idle or self.completed:
             self._logger.debug("Task not running")
             return None
-        self._interrupt.set()
         self._future._stop()
+        self._interrupt.set()
 
     def shutdown(self) -> None:
         """Shutdown the download manager."""

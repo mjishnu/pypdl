@@ -46,7 +46,7 @@ class Producer:
                         raise
                     except Exception as e:
                         await asyncio.sleep(3)
-                        await in_queue.put((_id))
+                        await in_queue.put([_id])
                         self.logger.debug(
                             f"Failed to get header for {task}, skipping task"
                         )

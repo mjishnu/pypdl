@@ -2,8 +2,8 @@ import asyncio
 
 from aiofiles import os
 
-from downloader import Multidown, Singledown
-from utils import FileValidator, combine_files, create_segment_table
+from .downloader import Multidown, Singledown
+from .utils import FileValidator, combine_files, create_segment_table
 
 
 class Consumer:

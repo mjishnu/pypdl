@@ -24,6 +24,8 @@ def to_mb(size_in_bytes: int) -> float:
 
 
 def seconds_to_hms(sec: float) -> str:
+    if sec == -1:
+        return "99:59:59"
     time_struct = time.gmtime(sec)
     return time.strftime("%H:%M:%S", time_struct)
 
@@ -177,7 +179,12 @@ class TEventLoop:
 
     def __init__(self):
         self.loop = asyncio.new_event_loop()
-        Thread(target=self.loop.run_forever, daemon=True).start()
+        self._thread = Thread(target=self._run, daemon=False)
+        self._thread.start()
+
+    def _run(self):
+        self.loop.run_forever()
+        self.loop.close()
 
     def get(self) -> asyncio.AbstractEventLoop:
         return self.loop
@@ -196,8 +203,7 @@ class TEventLoop:
     def stop(self, *args):
         self.clear_wait()
         self.call_soon_threadsafe(self.loop.stop)
-        while self.loop.is_running():
-            time.sleep(0.1)
+        self._thread.join()
 
 
 class LoggingExecutor:

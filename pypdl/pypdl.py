@@ -7,20 +7,9 @@ from typing import Callable, Union
 
 import aiohttp
 
-from consumer import Consumer
-from producer import Producer
-from utils import (
-    AutoShutdownFuture,
-    EFuture,
-    LoggingExecutor,
-    ScreenCleaner,
-    Task,
-    TEventLoop,
-    cursor_up,
-    default_logger,
-    seconds_to_hms,
-    to_mb,
-)
+from . import utils
+from .consumer import Consumer
+from .producer import Producer
 
 
 class Pypdl:
@@ -28,11 +17,11 @@ class Pypdl:
         self,
         max_concurrent: int = 1,
         allow_reuse: bool = False,
-        logger: Logger = default_logger("Pypdl"),
+        logger: Logger = utils.default_logger("Pypdl"),
     ):
         self._interrupt = Event()
-        self._pool = LoggingExecutor(logger, max_workers=1)
-        self._loop = TEventLoop()
+        self._pool = utils.LoggingExecutor(logger, max_workers=1)
+        self._loop = utils.TEventLoop()
         self._producer = None
         self._consumers = []
         self._producer_queue = None
@@ -103,9 +92,10 @@ class Pypdl:
         display: bool = True,
         clear_terminal: bool = True,
         **kwargs,
-    ) -> Union[EFuture, AutoShutdownFuture]:
+    ) -> Union[utils.EFuture, utils.AutoShutdownFuture]:
         if not self.is_idle:
-            raise RuntimeError("Pypdl already running")
+            tasks = asyncio.all_tasks(self._loop.loop)
+            raise RuntimeError(f"Pypdl already running {tasks}")
 
         if tasks and (url or file_path):
             raise TypeError(
@@ -129,7 +119,7 @@ class Pypdl:
         }
         _kwargs.update(kwargs)
         for i, task_kwargs in enumerate(tasks):
-            task = Task(
+            task = utils.Task(
                 multisegment,
                 segments,
                 retries,
@@ -144,7 +134,7 @@ class Pypdl:
 
         coro = self._download_tasks(task_dict, display, clear_terminal)
 
-        self._future = EFuture(
+        self._future = utils.EFuture(
             asyncio.run_coroutine_threadsafe(coro, self._loop.get()), self._loop
         )
 
@@ -153,7 +143,7 @@ class Pypdl:
             time.sleep(0.1)
 
         if not self._allow_reuse:
-            future = AutoShutdownFuture(self._future, self._loop, self._pool)
+            future = utils.AutoShutdownFuture(self._future, self._loop, self._pool)
         else:
             future = self._future
 
@@ -200,7 +190,7 @@ class Pypdl:
 
         self.time_spent = time.time() - start_time
         if display:
-            print(f"Time elapsed: {seconds_to_hms(self.time_spent)}")
+            print(f"Time elapsed: {utils.seconds_to_hms(self.time_spent)}")
 
         return self.success
 
@@ -242,7 +232,7 @@ class Pypdl:
         self._logger.debug("Starting progress monitor")
         interval = 0.5
         recent_queue = deque(maxlen=12)
-        with ScreenCleaner(display, clear_terminal):
+        with utils.ScreenCleaner(display, clear_terminal):
             while not self.completed and not self._interrupt.is_set():
                 self._calc_values(recent_queue, interval)
                 if display:
@@ -269,7 +259,7 @@ class Pypdl:
 
         # Speed calculation
         recent_queue.append(self.current_size)
-        non_zero_list = [to_mb(value) for value in recent_queue if value]
+        non_zero_list = [utils.to_mb(value) for value in recent_queue if value]
         if len(non_zero_list) < 1:
             self.speed = 0
         elif len(non_zero_list) == 1:
@@ -280,12 +270,12 @@ class Pypdl:
 
         if self.size:
             self.progress = int((self.current_size / self.size) * 100)
-            self.remaining_size = to_mb(self.size - self.current_size)
+            self.remaining_size = utils.to_mb(self.size - self.current_size)
 
             if self.speed:
-                self.eta = seconds_to_hms(self.remaining_size / self.speed)
+                self.eta = self.remaining_size / self.speed
             else:
-                self.eta = "99:59:59"
+                self.eta = -1
 
         if self.completed_task is self.total_task:
             future = asyncio.run_coroutine_threadsafe(
@@ -294,7 +284,7 @@ class Pypdl:
             future.result()
 
     def _display(self):
-        cursor_up()
+        utils.cursor_up()
         whitespace = " "
         if self.size:
             progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
@@ -304,7 +294,7 @@ class Pypdl:
             else:
                 info1 = ""
 
-            info2 = f"Size: {to_mb(self.size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: {self.eta}"
+            info2 = f"Size: {utils.to_mb(self.size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: { utils.seconds_to_hms(self.eta)}"
             print(progress_bar + info1 + info2 + whitespace * 35)
         else:
             if self.total_task > 1:
@@ -312,6 +302,6 @@ class Pypdl:
             else:
                 download_stats = f"Downloading... {whitespace * 95}\n"
 
-            info = f"Total Downloads: {self.completed_task}/{self.total_task}, Downloaded Size: {to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s"
+            info = f"Total Downloads: {self.completed_task}/{self.total_task}, Downloaded Size: {utils.to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s"
 
             print(download_stats + info + whitespace * 35)

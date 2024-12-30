@@ -1,6 +1,5 @@
 import asyncio
-
-from utils import get_filepath
+from .utils import get_filepath
 
 
 class Producer:
@@ -90,7 +89,7 @@ class Producer:
     async def _fetch_task_info(self, url, file_path, multisegment, **kwargs):
         if callable(url):
             url = url()
-        kwargs.update({"raise_for_status": False})
+
         header = await self._fetch_header(url, **kwargs)
         file_path = await get_filepath(url, header, file_path)
         if size := int(header.get("content-length", 0)):
@@ -108,14 +107,15 @@ class Producer:
         return url, file_path, multisegment, etag, size
 
     async def _fetch_header(self, url, **kwargs):
-        async with self.session.head(url, **kwargs) as response:
-            if response.status < 400:
-                self.logger.debug("Header acquired from HEAD request")
-                return response.headers
+        try:
+            async with self.session.head(url, **kwargs) as response:
+                if response.status < 400:
+                    self.logger.debug("Header acquired from HEAD request")
+                    return response.headers
+        except Exception:
+            pass
+
         async with self.session.get(url, **kwargs) as response:
             if response.status < 400:
                 self.logger.debug("Header acquired from GET request")
                 return response.headers
-        raise Exception(
-            f"Failed to get header (Status: {response.status}, Reason: {response.reason})"
-        )

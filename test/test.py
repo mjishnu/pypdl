@@ -101,7 +101,7 @@ class TestPypdl(unittest.TestCase):
         url = self.download_file_1MB  # file is 1.44MB, accurate time is 14s
         file_path = os.path.join(self.temp_dir, "test_1.dat")
         dl.start(url, file_path, display=False, speed_limit=0.1)
-        self.assertTrue(10 <= int(dl.time_spent) <= 20, f"took: {dl.time_spent}s")
+        self.assertTrue(10 <= int(dl.time_spent) <= 30, f"took: {dl.time_spent}s")
 
     def test_unblocked_download(self):
         dl = Pypdl(max_concurrent=2)

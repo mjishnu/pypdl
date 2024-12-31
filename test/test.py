@@ -16,6 +16,16 @@ from pypdl import Pypdl
 
 
 class TestPypdl(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(TestPypdl, self).__init__(*args, **kwargs)
+        self.temp_dir = os.path.join(tempfile.gettempdir(), "pypdl_test")
+        self.download_file_1MB = "https://7-zip.org/a/7z2409-src.tar.xz"
+        self.no_head_support_url = "https://ash-speed.hetzner.com/100MB.bin"
+
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+        os.mkdir(self.temp_dir)
+
     def setUp(self):
         warnings.filterwarnings(
             "ignore", message="unclosed <socket.socket", category=ResourceWarning
@@ -25,12 +35,6 @@ class TestPypdl(unittest.TestCase):
             message="unclosed transport <_ProactorSocketTransport",
             category=ResourceWarning,
         )
-        self.temp_dir = os.path.join(tempfile.gettempdir(), "pypdl_test")
-        self.download_file_1MB = "https://7-zip.org/a/7z2409-src.tar.xz"
-        self.crappy_url = "https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/arquivos/shpc/dsas/ca/ca-2004-01.csv"
-        if os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
-        os.mkdir(self.temp_dir)
 
     def _assert_download(self, expected, success, filepath):
         self.assertEqual(success, expected, f"{expected - success} downloads failed")
@@ -179,7 +183,7 @@ class TestPypdl(unittest.TestCase):
             "Unable to acquire header from HEAD request",
         )
 
-        url = self.crappy_url
+        url = self.no_head_support_url
         file_path = os.path.join(self.temp_dir, "temp.csv")
         dl.start(url, file_path, display=False, block=False)
         time.sleep(3)

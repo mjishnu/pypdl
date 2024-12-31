@@ -6,7 +6,7 @@ import sys
 import time
 from concurrent.futures import CancelledError, Executor, Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Union, List, Optional, Callable
 from urllib.parse import unquote, urlparse
 from threading import Thread
 
@@ -35,7 +35,7 @@ def cursor_up() -> None:
     sys.stdout.flush()
 
 
-async def get_filepath(url: str, headers: Dict, file_path: str) -> str:
+async def get_filepath(url: str, headers: Dict[str, str], file_path: str) -> str:
     content_disposition = headers.get("Content-Disposition", None)
 
     if content_disposition and "filename=" in content_disposition:
@@ -56,7 +56,7 @@ async def get_filepath(url: str, headers: Dict, file_path: str) -> str:
 
 
 async def create_segment_table(
-    url: str, file_path: str, segments: str, size: int, etag: str, etag_validation: bool
+    url: str, file_path: str, segments: int, size: int, etag: str, etag_validation: bool
 ) -> Dict:
     """Create a segment table for multi-segment download."""
     progress_file = file_path + ".json"
@@ -138,17 +138,17 @@ def default_logger(name: str) -> logging.Logger:
 class Task:
     def __init__(
         self,
-        multisegment,
-        segments,
-        tries,
-        overwrite,
-        speed_limit,
-        etag_validation,
-        size=0,
+        multisegment: bool,
+        segments: int,
+        tries: int,
+        overwrite: bool,
+        speed_limit: float,
+        etag_validation: bool,
+        size: int = 0,
         **kwargs,
     ):
-        self.url = None
-        self.file_path = None
+        self.url: Optional[str] = None
+        self.file_path: Optional[str] = None
         self.multisegment = multisegment
         self.segments = segments
         self.tries = tries + 1
@@ -170,7 +170,7 @@ class Task:
             else:
                 self.kwargs[key] = value
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Task(url={self.url}, file_path={self.file_path}, tries={self.tries}, size={self.size})"
 
 
@@ -182,7 +182,7 @@ class TEventLoop:
         self._thread = Thread(target=self._run, daemon=False)
         self._thread.start()
 
-    def _run(self):
+    def _run(self) -> None:
         self.loop.run_forever()
         self.loop.close()
 
@@ -213,13 +213,13 @@ class LoggingExecutor:
         self.executor = ThreadPoolExecutor(*args, **kwargs)
         self.logger = logger
 
-    def submit(self, func: callable, *args, **kwargs) -> Future:
+    def submit(self, func: Callable, *args, **kwargs) -> Future:
         return self.executor.submit(self._wrap(func, *args, **kwargs))
 
     def shutdown(self) -> None:
         self.executor.shutdown()
 
-    def _wrap(self, func, *args, **kwargs):
+    def _wrap(self, func: Callable, *args, **kwargs) -> Callable:
         def wrapper():
             try:
                 return func(*args, **kwargs)
@@ -255,7 +255,9 @@ class AutoShutdownFuture:
         self.executor = executor
         self.loop = loop
 
-    def result(self, timeout: float = None) -> Union[[FileValidator, None], []]:
+    def result(
+        self, timeout: Optional[float] = None
+    ) -> Union[List[FileValidator], None]:
         result = self.future.result(timeout)
         self.loop.stop()
         self.executor.shutdown()
@@ -269,10 +271,12 @@ class EFuture:
         self.future = future
         self.loop = loop
 
-    def result(self, timeout: float = None) -> Union[[FileValidator, None], []]:
+    def result(
+        self, timeout: Optional[float] = None
+    ) -> Union[List[FileValidator], None]:
         return self.future.result(timeout)
 
-    def _stop(self):
+    def _stop(self) -> None:
         self.loop.call_soon_threadsafe(self.future.cancel)
         try:
             self.result()

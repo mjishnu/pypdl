@@ -158,7 +158,7 @@ class Task:
         self.size = size
         self.kwargs = kwargs
 
-    def set(self, **kwargs):
+    def set(self, **kwargs) -> None:
         self.kwargs = {}
         for key, value in kwargs.items():
             if key == "retries":
@@ -189,18 +189,18 @@ class TEventLoop:
     def get(self) -> asyncio.AbstractEventLoop:
         return self.loop
 
-    def call_soon_threadsafe(self, func, *args):
+    def call_soon_threadsafe(self, func, *args) -> None:
         return self.loop.call_soon_threadsafe(func, *args)
 
     def has_running_tasks(self) -> bool:
         tasks = asyncio.all_tasks(self.loop)
         return any(not task.done() for task in tasks)
 
-    def clear_wait(self):
+    def clear_wait(self) -> None:
         while self.has_running_tasks():
             time.sleep(0.1)
 
-    def stop(self, *args):
+    def stop(self, *args) -> None:
         self.clear_wait()
         self.call_soon_threadsafe(self.loop.stop)
         self._thread.join()
@@ -213,10 +213,10 @@ class LoggingExecutor:
         self.executor = ThreadPoolExecutor(*args, **kwargs)
         self.logger = logger
 
-    def submit(self, func: callable, *args, **kwargs):
+    def submit(self, func: callable, *args, **kwargs) -> Future:
         return self.executor.submit(self._wrap(func, *args, **kwargs))
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self.executor.shutdown()
 
     def _wrap(self, func, *args, **kwargs):
@@ -263,11 +263,13 @@ class AutoShutdownFuture:
 
 
 class EFuture:
+    """A Future object wrapper that cancels the future and clears the eventloop when stopped."""
+
     def __init__(self, future: Future, loop: TEventLoop):
         self.future = future
         self.loop = loop
 
-    def result(self, timeout: float = None):
+    def result(self, timeout: float = None) -> Union[[FileValidator, None], []]:
         return self.future.result(timeout)
 
     def _stop(self):

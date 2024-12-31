@@ -15,9 +15,9 @@ from .producer import Producer
 class Pypdl:
     def __init__(
         self,
-        max_concurrent: int = 1,
         allow_reuse: bool = False,
         logger: Logger = utils.default_logger("Pypdl"),
+        max_concurrent: int = 1,
     ):
         self._interrupt = Event()
         self._pool = utils.LoggingExecutor(logger, max_workers=1)
@@ -26,9 +26,9 @@ class Pypdl:
         self._consumers = []
         self._producer_queue = None
         self._consumer_queue = None
-        self._max_concurrent = max_concurrent
         self._allow_reuse = allow_reuse
         self._logger = logger
+        self._max_concurrent = max_concurrent
         self._future = None
 
         self.size = None
@@ -47,21 +47,15 @@ class Pypdl:
 
     @property
     def is_idle(self) -> bool:
+        """Return True if download manager is idle, otherwise returns False"""
         return not self._loop.has_running_tasks()
 
     @property
-    def logger(self):
+    def logger(self) -> Union[Logger, None]:
         """Return logger if logger is in accessible state, otherwise returns None"""
         if self.is_idle:
             return self._logger
         return None
-
-    def set_max_concurrent(self, max_concurrent) -> bool:
-        """Returns True if max_concurrent was successfully set, otherwise returns False"""
-        if self.is_idle:
-            self._max_concurrent = max_concurrent
-            return True
-        return False
 
     def set_allow_reuse(self, allow_reuse) -> bool:
         """Returns True if allow_reuse was successfully set, otherwise returns False"""
@@ -74,6 +68,13 @@ class Pypdl:
         """Returns True if logger was successfully set, otherwise returns False"""
         if self.is_idle:
             self._logger = logger
+            return True
+        return False
+
+    def set_max_concurrent(self, max_concurrent) -> bool:
+        """Returns True if max_concurrent was successfully set, otherwise returns False"""
+        if self.is_idle:
+            self._max_concurrent = max_concurrent
             return True
         return False
 
@@ -92,7 +93,27 @@ class Pypdl:
         display: bool = True,
         clear_terminal: bool = True,
         **kwargs,
-    ) -> Union[utils.EFuture, utils.AutoShutdownFuture]:
+    ) -> Union[utils.EFuture, utils.AutoShutdownFuture, list]:
+        """
+        Start the download process.
+
+        :param url: URL (str or callable) if `tasks` not provided.
+        :param file_path: Local file path for the single download.
+        :param tasks: List of tasks (dict), each with its own URL and other supported keys.
+        :param multisegment: Whether to download in multiple segments.
+        :param segments: Number of segments if multi-segmented.
+        :param retries: Number of retries for failed downloads.
+        :param overwrite: Overwrite existing files if True.
+        :param speed_limit: Limit download speed in MB/s if > 0.
+        :param etag_validation: Validate server-provided ETag if True.
+        :param block: If True, block until downloads finish.
+        :param display: If True, display progress.
+        :param clear_terminal: If True, clear terminal before displaying progress bar.
+        :param kwargs: Addtional keyword arguments for aiohttp.
+        :return: A future-like object if non-blocking, or a result list if blocking.
+        :raises RuntimeError: If downloads are already in progress.
+        :raises TypeError: If invalid parameters or task definitions are provided.
+        """
         if not self.is_idle:
             tasks = asyncio.all_tasks(self._loop.loop)
             raise RuntimeError(f"Pypdl already running {tasks}")
@@ -195,6 +216,7 @@ class Pypdl:
         return self.success
 
     def stop(self) -> None:
+        """Stop the download manager."""
         self._logger.debug("stop called")
         if self.is_idle or self.completed:
             self._logger.debug("Task not running")
@@ -209,7 +231,7 @@ class Pypdl:
         self._pool.shutdown()
         self._logger.debug("Shutdown download manager")
 
-    def _reset(self) -> None:
+    def _reset(self):
         self._interrupt.clear()
         self._consumers.clear()
         self._producer = None

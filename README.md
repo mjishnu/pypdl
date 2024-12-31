@@ -47,36 +47,65 @@ The `Pypdl` object provides additional options for advanced usage:
 ```py
 from pypdl import Pypdl
 
-dl = Pypdl(allow_reuse=False, logger=default_logger("Pypdl"))
+dl = Pypdl(allow_reuse=False, logger=default_logger("Pypdl"), max_concurrent: int = 1)
 dl.start(
-    url='http://example.com/file.txt',
-    file_path='file.txt',
+    url=None,
+    file_path=None,
+    tasks=None,
     multisegment=True,
     segments=10,
     overwrite=True,
     etag=True,
     retries=0,
-    mirror_func=None,
     display=True,
     clear_terminal=True,
-    block=True
+    block=True,
+    **kwargs
 )
 ```
 
 Each option is explained below:
 - `allow_reuse`: Whether to allow reuse of existing Pypdl object for the next download. The default value is `False`.
 - `logger`: A logger object to log messages. The default value is a custom `Logger` with the name *Pypdl*.
+- `max_concurrent`: The maximum number of concurrent downloads. The default value is 1.
 - `url`: This can either be the URL of the file to download or a function that returns the URL.
 - `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded into the given path.
+- `tasks`: A list of tasks to be downloaded. Each task is a dictionary with the following keys:
+    - `url` (required): The URL of the file to download.
+    - Optional keys (The default value is set by the `Pypdl` start method):
+        - `file_path`: path to save the downloaded file.
+        - `multisegment`: Whether to use multi-segmented download.
+        - `segments`: The number of segments the file should be divided into for multi-segmented download.
+        - `overwrite`: Whether to overwrite the file if it already exists.
+        - `etag`: Whether to validate the ETag before resuming downloads.
+        - `retries`: The number of times to retry the download in case of an error.
+    - Additonal supported keyword arguments of `Pypdl` start method.
+    
 - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
 - `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 10.
 - `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
 - `etag`: Whether to validate the ETag before resuming downloads. The default value is `True`.
 - `retries`: The number of times to retry the download in case of an error. The default value is 0.
-- `mirror_func`: A function to get a new download URL in case of an error. The default value is `None`.
 - `display`: Whether to display download progress and other optional messages. The default value is `True`.
 - `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
 - `block`: Whether to block until the download is complete. The default value is `True`.
+
+- Supported Keyword Arguments:
+    - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
+    - `data`: The data to send in the body of the request. The default value is `None`.
+    - `json`: A JSON-compatible Python object to send in the body of the request. The default value is `None`.
+    - `cookies`: HTTP Cookies to send with the request. The default value is `None`.
+    - `headers`: HTTP Headers to send with the request. The default value is `None`.
+    - `auth`: An object that represents HTTP Basic Authorization. The default value is `None`.
+    - `allow_redirects`: If set to False, do not follow redirects. The default value is `True`.
+    - `max_redirects`: Maximum number of redirects to follow. The default value is `10`.
+    - `proxy`: Proxy URL. The default value is `None`.
+    - `proxy_auth`: An object that represents proxy HTTP Basic Authorization. The default value is `None`.
+    - `timeout`: (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout. The default value is `aiohttp.ClientTimeout(sock_read=60)`.
+    - `ssl`: SSL validation mode. The default value is `None`.
+    - `proxy_headers`: HTTP headers to send to the proxy if the `proxy` parameter has been provided. The default value is `None`.
+
+    For detailed information on each parameter, refer the [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_reference.html#aiohttp.ClientSession.request). Please ensure that only the *supported keyword arguments* are used. Using unsupported or irrelevant keyword arguments may lead to unexpected behavior or errors.
 
 ### Examples
 
@@ -106,7 +135,6 @@ def main():
         multisegment=True,
         block=True,
         retries=3,
-        mirror_func=None,
         etag=True,
     )
 
@@ -130,7 +158,7 @@ dl.logger.setLevel('DEBUG')
 # start the download process
 # block=False so we can print the progress
 # display=False so we can print the progress ourselves
-dl.start('https://example.com/file.zip', segments=8,block=False,display=False)
+future = dl.start('https://example.com/file.zip', segments=8,block=False,display=False)
 
 # print the progress
 while dl.progress != 70:
@@ -143,11 +171,14 @@ dl.stop()
 #...
 
 # resume the download process
-dl.start('https://example.com/file.zip', segments=8,block=False,display=False)
+future = dl.start('https://example.com/file.zip', segments=8,block=False,display=False)
 
 # print rest of the progress
 while not d.completed:
   print(dl.progress)
+
+# get the result, calling result() on future is essential when block=False so everything is properly cleaned up
+result = future.result()
 
 ```
 
@@ -166,23 +197,30 @@ def dynamic_url():
 dl = Pypdl()
 
 # if block = True --> returns a FileValidator object
-file = dl.start(dynamic_url, block=True) 
+res = dl.start(dynamic_url, block=True) 
 
 # validate hash
-if file.validate_hash(correct_hash,'sha256'):
+if res.validate_hash(correct_hash,'sha256'):
     print('Hash is valid')
 else:
     print('Hash is invalid')
 
 # scenario where block = False --> returns a AutoShutdownFuture object
-file = dl.start(dynamic_url, block=False)
+mirror_urls = ['https://example.com/file2.zip', 'https://example.com/file1.zip']
+
+mirror_func = lambda: mirror_urls.pop(0) 
+
+# retry download with different url if current fails
+future = dl.start(mirror_func, block=False,retries=2)
 
 # do something
 # ...
 
+# It is essential to call result() on future when block=False so everything is properly cleaned up
+res = future.result()
 # validate hash
 if dl.completed:
-  if file.result().validate_hash(correct_hash,'sha256'):
+  if res.validate_hash(correct_hash,'sha256'):
       print('Hash is valid')
   else:
       print('Hash is invalid')
@@ -212,10 +250,6 @@ dl = Pypdl(allow_reuse=True, logger=logger)
 
 for url in urls:
     dl.start(url, block=False)
-
-    # waiting for the size and other preliminary data to be retrived
-    while dl.wait:
-        time.sleep(0.1)
     
     # get the size of the file and add it to size list
     size.append(dl.size)
@@ -232,41 +266,39 @@ dl.shutdown()
 ```
 
 
-An example of using `PypdlFactory` to download multiple files concurrently:
+An example of downloading multiple files concurrently:
 
 ```py
-from pypdl import PypdlFactory
+from pypdl import pypdl
 
 proxy = "http://user:pass@some.proxy.com"
 
-# create a PypdlFactory object
-factory = PypdlFactory(instances=5, allow_reuse=True, proxy=proxy)
+# create a pypdl object with max_concurrent set to 2
+dl = pypdl(max_concurrent=2, allow_reuse=True, proxy=proxy)
 
-# List of tasks to be downloaded. Each task is a tuple of (URL, {Pypdl arguments}).
-# - URL: The download link (string).
-# - {Pypdl arguments}: A dictionary of arguments supported by `Pypdl`.
+# List of tasks to be downloaded..
 tasks = [
-    ('https://example.com/file1.zip', {'file_path': 'file1.zip'}),
-    ('https://example.com/file2.zip', {'file_path': 'file2.zip'}),
-    ('https://example.com/file3.zip', {'file_path': 'file3.zip'}),
-    ('https://example.com/file4.zip', {'file_path': 'file4.zip'}),
-    ('https://example.com/file5.zip', {'file_path': 'file5.zip'}),
+    {'url':'https://example.com/file1.zip', 'file_path': 'file1.zip'},
+    {'url':'https://example.com/file2.zip', 'file_path': 'file2.zip'},
+    {'url':'https://example.com/file3.zip', 'file_path': 'file3.zip'},
+    {'url':'https://example.com/file4.zip', 'file_path': 'file4.zip'},
+    {'url':'https://example.com/file5.zip', 'file_path': 'file5.zip'},
 ]
 
 # start the download process
-results = factory.start(tasks, display=True, block=False)
+results = dl.start(tasks=tasks, display=True, block=False)
 
 # do something
 # ...
 
 # stop the download process
-factory.stop()
+dl.stop()
 
 # do something
 # ...
 
 # restart the download process
-results = factory.start(tasks, display=True, block=True)
+results = factory.start(tasks=tasks, display=True, block=True)
 
 # print the results
 for url, result in results:
@@ -277,18 +309,18 @@ for url, result in results:
         print(f'{url} - Hash is invalid')
 
 task2 = [
-    ('https://example.com/file6.zip', {'file_path': 'file6.zip'}),
-    ('https://example.com/file7.zip', {'file_path': 'file7.zip'}),
-    ('https://example.com/file8.zip', {'file_path': 'file8.zip'}),
-    ('https://example.com/file9.zip', {'file_path': 'file9.zip'}),
-    ('https://example.com/file10.zip', {'file_path': 'file10.zip'}),
+    {'url':'https://example.com/file6.zip', 'file_path': 'file6.zip'},
+    {'url':'https://example.com/file7.zip', 'file_path': 'file7.zip'},
+    {'url':'https://example.com/file8.zip', 'file_path': 'file8.zip'},
+    {'url':'https://example.com/file9.zip', 'file_path': 'file9.zip'},
+    {'url':'https://example.com/file10.zip', 'file_path': 'file10.zip'},
 ]
 
 # start the download process
-factory.start(task2, display=True, block=True)
+dl.start(tasks=task2, display=True, block=True)
 
 # shutdown the downloader, this is essential when allow_reuse is enabled
-factory.shutdown()
+dl.shutdown()
 ```
 For more detailed info about parameters refer [API reference](https://github.com/mjishnu/pypdl?tab=readme-ov-file#pypdlfactory)
 ## API Reference
@@ -302,135 +334,94 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 
 - `logger`: (logging.Logger, Optional) A logger object to log messages. The default value is custom `Logger` with the name *Pypdl*.
 
-- Supported Keyword Arguments:
-    - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
-    - `data`: The data to send in the body of the request. The default value is `None`.
-    - `json`: A JSON-compatible Python object to send in the body of the request. The default value is `None`.
-    - `cookies`: HTTP Cookies to send with the request. The default value is `None`.
-    - `headers`: HTTP Headers to send with the request. The default value is `None`.
-    - `auth`: An object that represents HTTP Basic Authorization. The default value is `None`.
-    - `allow_redirects`: If set to False, do not follow redirects. The default value is `True`.
-    - `max_redirects`: Maximum number of redirects to follow. The default value is `10`.
-    - `proxy`: Proxy URL. The default value is `None`.
-    - `proxy_auth`: An object that represents proxy HTTP Basic Authorization. The default value is `None`.
-    - `timeout`: (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout. The default value is `aiohttp.ClientTimeout(sock_read=60)`.
-    - `ssl`: SSL validation mode. The default value is `None`.
-    - `proxy_headers`: HTTP headers to send to the proxy if the `proxy` parameter has been provided. The default value is `None`.
+- `max_concurrent`: (int, Optional) The maximum number of concurrent downloads. The default value is 1.
 
-    For detailed information on each parameter, refer the [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_reference.html#aiohttp.ClientSession.request). Please ensure that only the *supported keyword arguments* are used. Using unsupported or irrelevant keyword arguments may lead to unexpected behavior or errors.
-    
 #### Attributes
 
 - `size`: The total size of the file to be downloaded, in bytes.
+- `current_size`: The amount of data downloaded so far, in bytes.
+- `remaining_size`: The amount of data remaining to be downloaded, in bytes.
 - `progress`: The download progress percentage.
 - `speed`: The download speed, in MB/s.
 - `time_spent`: The time spent downloading, in seconds.
-- `current_size`: The amount of data downloaded so far, in bytes.
-- `eta`: The estimated time remaining for download completion, in the format "HH:MM:SS".
-- `remaining`: The amount of data remaining to be downloaded, in bytes.
-- `failed`: A flag that indicates if the download failed.
+- `eta`: The estimated time remaining for download completion, in seconds.
+- `total_tasks`: The total number of tasks to be downloaded.
+- `completed_tasks`: The number of tasks that have been completed.
+- `task_progress`: The progress of all tasks.
 - `completed`: A flag that indicates if the download is complete.
-- `wait`: A flag indicating whether preliminary information (e.g., file size) has been retrieved.
-- `logger`: The logger object used for logging messages.
+- `success`: A list of tasks that were successfully downloaded.
+- `failed`: A list of tasks that failed to download.
+- `logger`: A property that returns the logger if available.
+- `is_idle`: A flag that indicates if the downloader is idle.
 
 #### Methods
 
-- `start(url,
+- `start(url=None,
 file_path=None,
+tasks=None,
 multisegment=True,
 segments=10,
 overwrite=True,
 etag=True,
 retries=0,
-mirror_func=None,
 display=True,
 clear_terminal=True,
-block=True)`: Starts the download process.
+block=True
+**kwargs)`: Starts the download process.
 
     ##### Parameters
 
     - `url`: This can either be the URL of the file to download or a function that returns the URL.
     - `file_path`: An optional path to save the downloaded file. By default, it uses the present working directory. If `file_path` is a directory, then the file is downloaded into it; otherwise, the file is downloaded into the given path.
+    - `tasks`: A list of tasks to be downloaded. Each task is a dictionary with the following keys:
+        - `url` (required): The URL of the file to download.
+        - Optional keys (The default value is set by the `Pypdl` start method):
+            - `file_path`: path to save the downloaded file.
+            - `multisegment`: Whether to use multi-segmented download.
+            - `segments`: The number of segments the file should be divided into for multi-segmented download.
+            - `overwrite`: Whether to overwrite the file if it already exists.
+            - `etag`: Whether to validate the ETag before resuming downloads.
+            - `retries`: The number of times to retry the download in case of an error.
+        - Additonal supported keyword arguments of `Pypdl` start method.
+        
     - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
     - `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 10.
     - `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
     - `etag`: Whether to validate the ETag before resuming downloads. The default value is `True`.
     - `retries`: The number of times to retry the download in case of an error. The default value is 0.
-    - `mirror_func`: A function to get a new download URL in case of an error. The default value is `None`.
     - `display`: Whether to display download progress and other optional messages. The default value is `True`.
     - `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
     - `block`: Whether to block until the download is complete. The default value is `True`.
 
+    - Supported Keyword Arguments:
+        - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
+        - `data`: The data to send in the body of the request. The default value is `None`.
+        - `json`: A JSON-compatible Python object to send in the body of the request. The default value is `None`.
+        - `cookies`: HTTP Cookies to send with the request. The default value is `None`.
+        - `headers`: HTTP Headers to send with the request. The default value is `None`.
+        - `auth`: An object that represents HTTP Basic Authorization. The default value is `None`.
+        - `allow_redirects`: If set to False, do not follow redirects. The default value is `True`.
+        - `max_redirects`: Maximum number of redirects to follow. The default value is `10`.
+        - `proxy`: Proxy URL. The default value is `None`.
+        - `proxy_auth`: An object that represents proxy HTTP Basic Authorization. The default value is `None`.
+        - `timeout`: (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout. The default value is `aiohttp.ClientTimeout(sock_read=60)`.
+        - `ssl`: SSL validation mode. The default value is `None`.
+        - `proxy_headers`: HTTP headers to send to the proxy if the `proxy` parameter has been provided. The default value is `None`.
+
+        For detailed information on each parameter, refer the [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_reference.html#aiohttp.ClientSession.request). Please ensure that only the *supported keyword arguments* are used. Using unsupported or irrelevant keyword arguments may lead to unexpected behavior or errors.
+
     ##### Returns
     
     - `AutoShutdownFuture`: If `block` and `allow_reuse` is  set to `False`.
-    - `concurrent.futures.Future`: If `block` is `False` and `allow_reuse` is `True`.
+    - `EFuture`: If `block` is `False` and `allow_reuse` is `True`.
     - `FileValidator`: If `block` is `True` and the download is successful.
     - `None`: If `block` is `True` and the download fails.
 
 - `stop()`: Stops the download process.
 - `shutdown()`: Shuts down the downloader.
-
-### `PypdlFactory()`
-
-The `PypdlFactory` class manages multiple instances of the `Pypdl` downloader. It allows for concurrent downloads and provides progress tracking across all active downloads.
-
-#### Arguments
-
-- `instances`: (int, Optional) The number of `Pypdl` instances to create. The default value is 5.
-- `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `PypdlFactory` objects for next download. The default value is `False`. It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
-
-- `logger`: (logging.Logger, Optional) A logger object to log messages. The default value is custom `Logger` with the name *PypdlFactory*.
-
-- Supported Keyword Arguments:
-    - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
-    - `data`: The data to send in the body of the request. The default value is `None`.
-    - `json`: A JSON-compatible Python object to send in the body of the request. The default value is `None`.
-    - `cookies`: HTTP Cookies to send with the request. The default value is `None`.
-    - `headers`: HTTP Headers to send with the request. The default value is `None`.
-    - `auth`: An object that represents HTTP Basic Authorization. The default value is `None`.
-    - `allow_redirects`: If set to False, do not follow redirects. The default value is `True`.
-    - `max_redirects`: Maximum number of redirects to follow. The default value is `10`.
-    - `proxy`: Proxy URL. The default value is `None`.
-    - `proxy_auth`: An object that represents proxy HTTP Basic Authorization. The default value is `None`.
-    - `timeout`: (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout. The default value is `aiohttp.ClientTimeout(sock_read=60)`.
-    - `ssl`: SSL validation mode. The default value is `None`.
-    - `proxy_headers`: HTTP headers to send to the proxy if the `proxy` parameter has been provided. The default value is `None`.
-
-    For detailed information on each parameter, refer the [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_reference.html#aiohttp.ClientSession.request). Please ensure that only the *supported keyword arguments* are used. Using unsupported or irrelevant keyword arguments may lead to unexpected behavior or errors.
-
-#### Attributes
-
-- `progress`: The overall download progress percentage across all active downloads.
-- `speed`: The average download speed across all active downloads, in MB/s.
-- `time_spent`: The total time spent downloading across all active downloads, in seconds.
-- `current_size`: The total amount of data downloaded so far across all active downloads, in bytes.
-- `total`: The total number of download tasks.
-- `success`: A list of tuples where each tuple contains the URL of the download and the `FileValidator` of the download.
-- `failed`: A list of URLs for which the download failed.
-- `remaining`: A list of remaining download tasks.
-- `completed`: A flag to check if all tasks are completed.
-- `logger`: The logger object used for logging messages.
-
-#### Methods
-
-- `start(tasks, display=True, clear_terminal=True, block=True)`: Starts the download process for multiple tasks.
-
-    ##### Parameters
-
-    - `tasks`: (list) A list of tasks to be downloaded. Each task is a tuple where the first element is the URL and the second element is an optional dictionary with keyword arguments for `Pypdl` start method.
-    - `display`: (bool, Optional) Whether to display download progress and other messages. Default is True.
-    - `clear_terminal`: (bool, Optional) Whether to clear the terminal before displaying the download progress. Default is True.
-    - `block`: (bool, Optional) Whether to block the function until all downloads are complete. Default is True.
-
-    ##### Returns
-
-    - `AutoShutdownFuture`: If `block` and `allow_reuse` is  set to `False`.
-    - `concurrent.futures.Future`: If `block` is `False` and `allow_reuse` is `True`.
-    - `list`: If `block` is `True`. This is a list of tuples where each tuple contains the URL of the download and the `FileValidator` of the download.
-
-- `stop()`: Stops all active downloads.
-- `shutdown()`: Shuts down the factory.
+- `set_allow_reuse(allow_reuse)`: Sets whether to allow reuse of existing `Pypdl` object for next download.
+- `set_logger(logger)`: Sets the logger object to be used for logging messages.
+- `set_max_concurrent(max_concurrent)`: Sets the maximum number of concurrent downloads.
 
 ### Helper Classes
 
@@ -493,6 +484,19 @@ The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object
 ##### Methods
 
 - `result(timeout=None)`: Retrieves the result of the Future object and shuts down the executor. If the download was successful, it returns a `FileValidator` object; otherwise, it returns `None`.
+
+#### `EFuture()`
+
+The `EFuture` class is a wrapper for a `concurrent.futures.Future` object that integrates with an event loop to handle asynchronous operations.
+
+##### Parameters
+
+- `future`: The `Future` object to be wrapped.
+- `loop`: The event loop that will be used to manage the `Future`.
+
+##### Methods
+
+- `result(timeout=None)`: Retrieves the result of the `Future` object. If the `Future` completes successfully, it returns the result; otherwise, it raises an exception.
 
 ## License
 

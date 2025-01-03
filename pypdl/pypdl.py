@@ -219,7 +219,7 @@ class Pypdl:
         """Stop the download manager."""
         self._logger.debug("stop called")
         if self.is_idle or self.completed:
-            self._logger.debug("Task not running")
+            self._logger.debug("Task not running, nothing to stop")
             return None
         self._future._stop()
         self._interrupt.set()

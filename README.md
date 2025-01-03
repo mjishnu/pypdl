@@ -95,7 +95,7 @@ Each option is explained below:
     - `data`: The data to send in the body of the request. The default value is `None`.
     - `json`: A JSON-compatible Python object to send in the body of the request. The default value is `None`.
     - `cookies`: HTTP Cookies to send with the request. The default value is `None`.
-    - `headers`: HTTP Headers to send with the request. The default value is `None`.
+    - `headers`: HTTP headers to be sent with the request. The default value is `None`. *Please note that [multi-range headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range#requesting_multiple_ranges) are not supported*.
     - `auth`: An object that represents HTTP Basic Authorization. The default value is `None`.
     - `allow_redirects`: If set to False, do not follow redirects. The default value is `True`.
     - `max_redirects`: Maximum number of redirects to follow. The default value is `10`.
@@ -116,15 +116,15 @@ import aiohttp
 from pypdl import Pypdl
 
 def main():
-    # Using headers
-    headers = {"User-Agent":"Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0"}
+    # Using headers 
+    headers = {"User-Agent":"Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0", "range":"bytes=-10485760"}
     # Using proxy
     proxy = "http://user:pass@some.proxy.com"
     # Using timeout
     timeout = aiohttp.ClientTimeout(sock_read=20)
 
     # create a new pypdl object
-    dl = Pypdl(headers=headers, proxy=proxy, timeout=timeout)
+    dl = Pypdl()
 
     # start the download
     dl.start(
@@ -136,13 +136,16 @@ def main():
         block=True,
         retries=3,
         etag=True,
+        headers=headers, 
+        proxy=proxy, 
+        timeout=timeout
     )
 
 if __name__ == '__main__':
     main()
 ```
 
-This example downloads a file from the internet using 10 segments and displays the download progress. If the download fails, it will retry up to 3 times. we are also using headers, proxy and timeout, For more info regarding these parameters refer [API reference](https://github.com/mjishnu/pypdl?tab=readme-ov-file#pypdl-1)
+This example downloads a file from the internet using 10 segments and displays the download progress. If the download fails, it will retry up to 3 times. We are also using headers to set the User-Agent and Range to download the last 10MB of the file, as well as a proxy and timeout. For more information on these parameters, refer to the [API reference](https://github.com/mjishnu/pypdl?tab=readme-ov-file#pypdl-1).
 
 Another example of implementing pause resume functionality, printing the progress to console and changing log level to debug:
 
@@ -274,7 +277,7 @@ from pypdl import pypdl
 proxy = "http://user:pass@some.proxy.com"
 
 # create a pypdl object with max_concurrent set to 2
-dl = pypdl(max_concurrent=2, allow_reuse=True, proxy=proxy)
+dl = pypdl(max_concurrent=2, allow_reuse=True)
 
 # List of tasks to be downloaded..
 tasks = [
@@ -285,8 +288,8 @@ tasks = [
     {'url':'https://example.com/file5.zip', 'file_path': 'file5.zip'},
 ]
 
-# start the download process
-results = dl.start(tasks=tasks, display=True, block=False)
+# start the download process with proxy
+results = dl.start(tasks=tasks, display=True, block=False,proxy=proxy)
 
 # do something
 # ...
@@ -297,8 +300,8 @@ dl.stop()
 # do something
 # ...
 
-# restart the download process
-results = factory.start(tasks=tasks, display=True, block=True)
+# restart the download process without proxy
+results = dl.start(tasks=tasks, display=True, block=True)
 
 # print the results
 for url, result in results:
@@ -398,7 +401,7 @@ block=True
         - `data`: The data to send in the body of the request. The default value is `None`.
         - `json`: A JSON-compatible Python object to send in the body of the request. The default value is `None`.
         - `cookies`: HTTP Cookies to send with the request. The default value is `None`.
-        - `headers`: HTTP Headers to send with the request. The default value is `None`.
+        - `headers`: HTTP headers to be sent with the request. The default value is `None`. *Please note that [multi-range headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range#requesting_multiple_ranges) are not supported*.
         - `auth`: An object that represents HTTP Basic Authorization. The default value is `None`.
         - `allow_redirects`: If set to False, do not follow redirects. The default value is `True`.
         - `max_redirects`: Maximum number of redirects to follow. The default value is `10`.

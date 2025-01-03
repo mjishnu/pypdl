@@ -53,13 +53,11 @@ class Multidown(Basicdown):
         url = segment_table["url"]
         overwrite = segment_table["overwrite"]
         segment_path = segment_table[id]["segment_path"]
-        start = segment_table[id]["start"]
-        end = segment_table[id]["end"]
         size = segment_table[id]["segment_size"]
 
         if await aiofiles.os.path.exists(segment_path):
             downloaded_size = await aiofiles.os.path.getsize(segment_path)
-            if overwrite or downloaded_size > size:
+            if overwrite or downloaded_size > size.value:
                 await aiofiles.os.remove(segment_path)
             else:
                 self.curr = downloaded_size
@@ -67,12 +65,14 @@ class Multidown(Basicdown):
         if kwargs.get("headers") is not None:
             kwargs["headers"] = kwargs["headers"].copy()
 
-        if self.curr < size:
-            start = start + self.curr
-            kwargs.setdefault("headers", {}).update({"range": f"bytes={start}-{end}"})
+        if self.curr < size.value:
+            start = size.start + self.curr
+            kwargs.setdefault("headers", {}).update(
+                {"range": f"bytes={start}-{size.end}"}
+            )
             await self.download(url, segment_path, "ab", **kwargs)
 
-        if self.curr == size:
+        if self.curr == size.value:
             self.completed = True
         else:
             raise Exception(

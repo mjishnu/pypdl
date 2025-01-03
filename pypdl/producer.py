@@ -1,5 +1,5 @@
 import asyncio
-from .utils import get_filepath
+from .utils import get_filepath, Size, get_range
 
 
 class Producer:
@@ -38,6 +38,7 @@ class Producer:
                             multisegment,
                             etag,
                             size,
+                            kwargs,
                         ) = await self._fetch_task_info(
                             task.url, task.file_path, task.multisegment, **task.kwargs
                         )
@@ -49,15 +50,15 @@ class Producer:
                         self.logger.debug(
                             f"Failed to get header for {task}, skipping task"
                         )
-                        self.logger.error(e)
+                        self.logger.exception(e)
                         continue
 
-                    if size == 0:
+                    if size.value == 0:
                         self.logger.debug("Size is Unavailable, setting size to None")
                         self.size_avail = False
 
-                    total_size -= task.size
-                    total_size += size
+                    total_size -= task.size.value
+                    total_size += size.value
                     task.size = size
                     await out_queue.put(
                         (
@@ -72,7 +73,7 @@ class Producer:
                                 task.overwrite,
                                 task.speed_limit,
                                 task.etag_validation,
-                                task.kwargs,
+                                kwargs,
                             ),
                         )
                     )
@@ -90,21 +91,41 @@ class Producer:
         if callable(url):
             url = url()
 
+        user_headers = kwargs.get("headers", {})
+        range_header = None
+
+        if user_headers:
+            _user_headers = user_headers.copy()
+            for key, value in user_headers.items():
+                if key.lower() == "range":
+                    range_header = value
+                    self.logger.debug("Range header found %s", range_header)
+                    del _user_headers[key]
+            kwargs["headers"] = _user_headers
+
         header = await self._fetch_header(url, **kwargs)
         file_path = await get_filepath(url, header, file_path)
-        if size := int(header.get("content-length", 0)):
-            self.logger.debug("Size acquired from header")
+        if file_size := int(header.get("content-length", 0)):
+            self.logger.debug("File size acquired from header")
 
+        if range_header:
+            start, end = get_range(range_header, file_size)
+        else:
+            start = 0
+            end = file_size - 1
+
+        size = Size(start, end)
         etag = header.get("etag", "")
         if etag != "":
             self.logger.debug("ETag acquired from header")
             etag = etag.strip('"')
 
-        if not size or not header.get("accept-ranges"):
+        if size.value < 1 or not header.get("accept-ranges"):
             self.logger.debug("Single segment mode, accept-ranges or size not found")
+            kwargs["headers"] = user_headers
             multisegment = False
 
-        return url, file_path, multisegment, etag, size
+        return url, file_path, multisegment, etag, size, kwargs
 
     async def _fetch_header(self, url, **kwargs):
         try:

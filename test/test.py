@@ -53,8 +53,10 @@ class TestPypdl(unittest.TestCase):
         dl = Pypdl()
         url = self.download_file_1MB
         file_path = os.path.join(self.temp_dir, "test.dat")
-        result = dl.start(url, file_path, display=False)
-        success = len(result)
+        future = dl.start(url, file_path, display=False, block=False, speed_limit=0.5)
+        time.sleep(2)
+        self.assertTrue(os.path.exists(file_path + ".json"))
+        success = len(future.result())
         self._assert_download(1, success, [file_path])
 
     def test_multiple_downloads(self):
@@ -171,7 +173,7 @@ class TestPypdl(unittest.TestCase):
         dl = Pypdl(allow_reuse=True, logger=logger)
         url = self.download_file_1MB
         file_path = os.path.join(self.temp_dir, "test.dat")
-        dl.start(url, file_path, display=False, block=False)
+        dl.start(url, file_path, display=False, block=False, speed_limit=0.1)
         time.sleep(3)
         dl.stop()
         self.assertTrue(os.path.exists(log_file))
@@ -185,9 +187,13 @@ class TestPypdl(unittest.TestCase):
 
         url = self.no_head_support_url
         file_path = os.path.join(self.temp_dir, "temp.csv")
-        dl.start(url, file_path, display=False, block=False)
+        dl.start(url, file_path, display=False, block=False, speed_limit=0.1)
         time.sleep(3)
-        dl.stop()
+
+        dl.shutdown()
+        logger.removeHandler(handler)
+        handler.close()
+
         with open(log_file, "r") as f:
             log_content = f.read()
         header_pattern = re.compile("Header acquired from GET request")
@@ -195,9 +201,6 @@ class TestPypdl(unittest.TestCase):
             header_pattern.search(log_content),
             "Unable to acquire header from GET request",
         )
-        dl.shutdown()
-        logger.removeHandler(handler)
-        handler.close()
 
     def test_retries(self):
         urls = [self.download_file_1MB, "http://fake_website/file"]

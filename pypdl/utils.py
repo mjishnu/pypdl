@@ -107,7 +107,7 @@ class TEventLoop:
 
     def __init__(self):
         self.loop = asyncio.new_event_loop()
-        self._thread = Thread(target=self._run, daemon=False)
+        self._thread = Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def _run(self) -> None:

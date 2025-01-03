@@ -38,8 +38,8 @@ class Consumer:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                self.logger.exception("Task %s failed", self.id)
-                self.logger.error(e)
+                self.logger.debug("Task %s failed", self.id)
+                self.logger.exception(e)
                 await out_queue.put([task[0]])
 
             self._workers.clear()

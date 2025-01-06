@@ -160,7 +160,7 @@ class Pypdl:
         )
 
         while self.is_idle:
-            self.logger.debug("waiting for download to start")
+            self._logger.debug("waiting for download to start")
             time.sleep(0.1)
 
         if not self._allow_reuse:
@@ -203,7 +203,7 @@ class Pypdl:
             self._logger.debug("Starting producer and consumer tasks")
             self._pool.submit(self._progress_monitor, display, clear_terminal)
 
-            res = await asyncio.gather(*coroutines)
+            res = await utils.auto_cancel_gather(*coroutines)
             self.failed.extend(res.pop(0))
             for success in res:
                 self.success.extend(success)

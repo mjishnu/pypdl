@@ -14,7 +14,6 @@ class Basicdown:
         self.session = session
         self.speed_limit = speed_limit * MEGABYTE
         self.curr = 0
-        self.completed = False
 
     async def download(self, url: str, path: str, mode: str, **kwargs) -> None:
         """Download data in chunks."""
@@ -43,7 +42,6 @@ class Singledown(Basicdown):
 
     async def worker(self, url: str, file_path: str, **kwargs) -> None:
         await self.download(url, file_path, "wb", **kwargs)
-        self.completed = True
 
 
 class Multidown(Basicdown):
@@ -72,9 +70,7 @@ class Multidown(Basicdown):
             )
             await self.download(url, segment_path, "ab", **kwargs)
 
-        if self.curr == size.value:
-            self.completed = True
-        else:
+        if self.curr != size.value:
             raise Exception(
                 f"Incorrect segment size: expected {size} bytes, received {self.curr} bytes"
             )

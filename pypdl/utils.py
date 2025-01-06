@@ -5,13 +5,13 @@ import logging
 import sys
 import time
 from concurrent.futures import CancelledError, Executor, Future, ThreadPoolExecutor
-from pathlib import Path
-from typing import Dict, Union, List, Optional, Callable, Tuple
-from urllib.parse import unquote, urlparse
+from os import path
 from threading import Thread
+from typing import Callable, Dict, List, Optional, Tuple, Union
+from urllib.parse import unquote, urlparse
 
 from aiofiles import open as fopen
-from aiofiles import os
+from aiofiles import os as aio_os
 
 MEGABYTE = 1048576
 BLOCKSIZE = 4096
@@ -59,9 +59,9 @@ class Task:
                 f"url should be of type str or callable, got {type(self.url).__name__}"
             )
 
-        if not isinstance(self.file_path, str):
+        if not (isinstance(self.file_path, str) or self.file_path is None):
             raise TypeError(
-                f"file_path should be of type str, got {type(self.file_path).__name__}"
+                f"file_path should be of type str or None, got {type(self.file_path).__name__}"
             )
         if not isinstance(self.multisegment, bool):
             raise TypeError(
@@ -255,6 +255,36 @@ def cursor_up() -> None:
     sys.stdout.flush()
 
 
+async def get_url(url: Union[str, Callable]) -> str:
+    if callable(url):
+        if asyncio.iscoroutine(url):
+            url = await url()
+        else:
+            url = url()
+
+    if callable(url):
+        return get_url(url)
+    return url
+
+
+async def auto_cancel_gather(*args, **kwargs) -> List:
+    tasks = set()
+    for task in args:
+        if isinstance(task, asyncio.Task):
+            tasks.add(task)
+        else:
+            tasks.add(asyncio.create_task(task))
+    try:
+        res = await asyncio.gather(*tasks, **kwargs)
+    except Exception:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+    return res
+
+
 async def get_filepath(url: str, headers: Dict[str, str], file_path: str) -> str:
     content_disposition = headers.get("Content-Disposition", None)
 
@@ -268,8 +298,8 @@ async def get_filepath(url: str, headers: Dict[str, str], file_path: str) -> str
     filename = filename.replace("/", "_")
 
     if file_path:
-        if await os.path.isdir(file_path):
-            return os.path.join(file_path, filename)
+        if await aio_os.path.isdir(file_path):
+            return path.join(file_path, filename)
         return file_path
 
     return filename
@@ -287,7 +317,7 @@ async def create_segment_table(
     progress_file = file_path + ".json"
     overwrite = True
 
-    if await os.path.exists(progress_file):
+    if await aio_os.path.exists(progress_file):
         async with fopen(progress_file, "r") as f:
             progress = json.loads(await f.read())
             if not etag_validation or (
@@ -338,10 +368,10 @@ async def combine_files(file_path: str, segments: int) -> None:
                     else:
                         break
 
-            await os.remove(segment_file)
+            await aio_os.remove(segment_file)
 
-    progress_file = Path(f"{file_path}.json")
-    await os.remove(progress_file)
+    progress_file = f"{file_path}.json"
+    await aio_os.remove(progress_file)
 
 
 def default_logger(name: str) -> logging.Logger:

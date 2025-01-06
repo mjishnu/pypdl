@@ -188,7 +188,7 @@ class TestPypdl(unittest.TestCase):
         url = self.no_head_support_url
         file_path = os.path.join(self.temp_dir, "temp.csv")
         dl.start(url, file_path, display=False, block=False, speed_limit=0.1)
-        time.sleep(3)
+        time.sleep(10)
 
         dl.shutdown()
         logger.removeHandler(handler)
@@ -238,7 +238,6 @@ class TestPypdl(unittest.TestCase):
 
     def test_etag_validation(self):
         dl = Pypdl()
-        dl.logger.setLevel("DEBUG")
         url = self.download_file_1MB
         file_path = os.path.join(self.temp_dir, "test.dat")
         dl.start(url, file_path, display=False, block=False, speed_limit=0.1)

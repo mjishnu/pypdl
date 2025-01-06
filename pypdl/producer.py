@@ -1,5 +1,5 @@
 import asyncio
-from .utils import get_filepath, Size, get_range
+from .utils import get_filepath, Size, get_range, get_url
 
 
 class Producer:
@@ -88,8 +88,7 @@ class Producer:
         return self.failed
 
     async def _fetch_task_info(self, url, file_path, multisegment, **kwargs):
-        if callable(url):
-            url = url()
+        url = await get_url(url)
 
         user_headers = kwargs.get("headers", {})
         range_header = None

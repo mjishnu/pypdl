@@ -3,7 +3,12 @@ import asyncio
 from aiofiles import os
 
 from .downloader import Multidown, Singledown
-from .utils import FileValidator, combine_files, create_segment_table
+from .utils import (
+    FileValidator,
+    auto_cancel_gather,
+    combine_files,
+    create_segment_table,
+)
 
 
 class Consumer:
@@ -95,7 +100,7 @@ class Consumer:
             self._workers.append(md)
             tasks.add(asyncio.create_task(md.worker(segment_table, segment, **kwargs)))
 
-        await asyncio.gather(*tasks)
+        await auto_cancel_gather(*tasks)
         await combine_files(file_path, segments)
         self.logger.debug("Downloaded all segments %s", self.id)
         self._show_size = False

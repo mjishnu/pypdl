@@ -268,21 +268,19 @@ async def get_url(url: Union[str, Callable]) -> str:
 
 
 async def auto_cancel_gather(*args, **kwargs) -> List:
-    tasks = set()
+    tasks = []
     for task in args:
         if isinstance(task, asyncio.Task):
-            tasks.add(task)
+            tasks.append(task)
         else:
-            tasks.add(asyncio.create_task(task))
+            tasks.append(asyncio.create_task(task))
     try:
-        res = await asyncio.gather(*tasks, **kwargs)
+        return await asyncio.gather(*tasks, **kwargs)
     except Exception:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         raise
-
-    return res
 
 
 async def get_filepath(url: str, headers: Dict[str, str], file_path: str) -> str:

@@ -86,6 +86,7 @@ class Pypdl:
         multisegment: bool = True,
         segments: int = 5,
         retries: int = 0,
+        mirrors: Union[str, list, Callable] = None,
         overwrite: bool = True,
         speed_limit: float = 0,
         etag_validation: bool = True,
@@ -128,7 +129,7 @@ class Pypdl:
                 raise TypeError(
                     "Expected a 'url' (str or callable) when 'tasks' not provided."
                 )
-            tasks = [{"url": url, "file_path": file_path}]
+            tasks = [{"url": url, "file_path": file_path, "mirrors": mirrors}]
 
         self._reset()
 

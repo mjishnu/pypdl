@@ -203,11 +203,16 @@ class TestPypdl(unittest.TestCase):
         )
 
     def test_retries(self):
-        urls = [self.download_file_1MB, "http://fake_website/file"]
+        mirrors = [self.download_file_1MB, "http://fake_website/file2"]
         file_path = os.path.join(self.temp_dir, "test.dat")
-        url_gen_func = lambda: urls.pop()
         dl = Pypdl()
-        res = dl.start(url_gen_func, file_path, display=False, retries=2)
+        res = dl.start(
+            "http://fake_website/file",
+            file_path,
+            display=False,
+            retries=2,
+            mirrors=mirrors,
+        )
         success = len(res)
         self._assert_download(1, success, [file_path])
 

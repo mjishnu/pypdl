@@ -32,6 +32,8 @@ class Task:
     ):
         self.url = None
         self.file_path = None
+        self.mirrors = None
+        self.default_url = None
         self.multisegment = multisegment
         self.segments = segments
         self.tries = tries + 1
@@ -53,15 +55,26 @@ class Task:
                 self.kwargs[key] = value
         self.validate()
 
+        if self.mirrors is not None and not isinstance(self.mirrors, list):
+            self.mirrors = [self.mirrors]
+        self.default_url = self.url
+
     def validate(self) -> None:
         if not (isinstance(self.url, str) or callable(self.url)):
             raise TypeError(
                 f"url should be of type str or callable, got {type(self.url).__name__}"
             )
-
         if not (isinstance(self.file_path, str) or self.file_path is None):
             raise TypeError(
                 f"file_path should be of type str or None, got {type(self.file_path).__name__}"
+            )
+        if not (
+            isinstance(self.mirrors, (list, str))
+            or self.mirrors is None
+            or callable(self.mirrors)
+        ):
+            raise TypeError(
+                f"mirrors should be of type str, callable, list or None, got {type(self.mirrors).__name__}"
             )
         if not isinstance(self.multisegment, bool):
             raise TypeError(
@@ -262,9 +275,9 @@ async def get_url(url: Union[str, Callable]) -> str:
         else:
             url = url()
 
-    if callable(url):
-        return get_url(url)
-    return url
+    if isinstance(url, str):
+        return url
+    raise TypeError(f"Function returned a non-string URL, got {type(url).__name__}")
 
 
 async def auto_cancel_gather(*args, **kwargs) -> List:

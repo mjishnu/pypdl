@@ -45,12 +45,16 @@ class Producer:
                     except asyncio.CancelledError:
                         raise
                     except Exception as e:
-                        await asyncio.sleep(3)
-                        await in_queue.put([_id])
                         self.logger.debug(
                             f"Failed to get header for {task}, skipping task"
                         )
                         self.logger.exception(e)
+                        await asyncio.sleep(3)
+                        new_url = (
+                            task.mirrors.pop(0) if task.mirrors else task.default_url
+                        )
+                        task.url = new_url
+                        await in_queue.put([_id])
                         continue
 
                     if size.value == 0:

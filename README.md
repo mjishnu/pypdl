@@ -53,10 +53,11 @@ dl.start(
     file_path=None,
     tasks=None,
     multisegment=True,
-    segments=10,
+    segments=5,
     overwrite=True,
     etag=True,
     retries=0,
+    mirrors=None,
     display=True,
     clear_terminal=True,
     block=True,
@@ -79,13 +80,15 @@ Each option is explained below:
         - `overwrite`: Whether to overwrite the file if it already exists.
         - `etag`: Whether to validate the ETag before resuming downloads.
         - `retries`: The number of times to retry the download in case of an error.
+    - `mirrors`(optional): The mirror URLs to be used if the primary URL fails.The default value is `None`.
     - Additonal supported keyword arguments of `Pypdl` start method.
     
 - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
-- `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 10.
+- `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 5.
 - `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
 - `etag`: Whether to validate the ETag before resuming downloads. The default value is `True`.
 - `retries`: The number of times to retry the download in case of an error. The default value is 0.
+- `mirrors`: The mirror URLs to be used if the primary URL fails. The default value is `None`. It can be a callable (functions, coroutines), string or List of callables, strings or both.
 - `display`: Whether to display download progress and other optional messages. The default value is `True`.
 - `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
 - `block`: Whether to block until the download is complete. The default value is `True`.
@@ -209,12 +212,10 @@ else:
     print('Hash is invalid')
 
 # scenario where block = False --> returns a AutoShutdownFuture object
-mirror_urls = ['https://example.com/file2.zip', 'https://example.com/file1.zip']
-
-mirror_func = lambda: mirror_urls.pop(0) 
+mirror_urls = ['https://example1.com/file2.zip', 'https://example2.com/file2.zip']
 
 # retry download with different url if current fails
-future = dl.start(mirror_func, block=False,retries=2)
+future = dl.start(url="https://example.com/file2.zip", mirrors=mirror_urls, block=False,retries=2)
 
 # do something
 # ...
@@ -363,7 +364,7 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 file_path=None,
 tasks=None,
 multisegment=True,
-segments=10,
+segments=5,
 overwrite=True,
 etag=True,
 retries=0,
@@ -385,13 +386,15 @@ block=True
             - `overwrite`: Whether to overwrite the file if it already exists.
             - `etag`: Whether to validate the ETag before resuming downloads.
             - `retries`: The number of times to retry the download in case of an error.
+        - `mirrors`(optional): The mirror URLs to be used if the primary URL fails.The default value is `None`.
         - Additonal supported keyword arguments of `Pypdl` start method.
         
     - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
-    - `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 10.
+    - `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 5.
     - `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
     - `etag`: Whether to validate the ETag before resuming downloads. The default value is `True`.
     - `retries`: The number of times to retry the download in case of an error. The default value is 0.
+    - `mirrors`: The mirror URLs to be used if the primary URL fails. The default value is `None`. It can be a callable (functions, coroutines), string or List of callables, strings or both.
     - `display`: Whether to display download progress and other optional messages. The default value is `True`.
     - `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
     - `block`: Whether to block until the download is complete. The default value is `True`.

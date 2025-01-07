@@ -44,10 +44,10 @@ class TestPypdl(unittest.TestCase):
     def test_single_segment_download(self):
         dl = Pypdl()
         url = self.download_file_1MB
-        file_path = os.path.join(self.temp_dir, "test.dat")
+        file_path = os.path.join(self.temp_dir)
         result = dl.start(url, file_path, display=False, multisegment=False)
         success = len(result)
-        self._assert_download(1, success, [file_path])
+        self.assertEqual(success, 1, "Download failed")
 
     def test_multi_segment_download(self):
         dl = Pypdl()

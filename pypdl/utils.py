@@ -270,7 +270,7 @@ def cursor_up() -> None:
 
 async def get_url(url: Union[str, Callable]) -> str:
     if callable(url):
-        if asyncio.iscoroutine(url):
+        if asyncio.iscoroutinefunction(url):
             url = await url()
         else:
             url = url()

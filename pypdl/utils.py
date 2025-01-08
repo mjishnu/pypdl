@@ -6,7 +6,7 @@ import sys
 import time
 from concurrent.futures import CancelledError, Executor, Future, ThreadPoolExecutor
 from os import path
-from threading import Thread
+from threading import Event, Thread
 from typing import Callable, Dict, List, Optional, Tuple, Union
 from urllib.parse import unquote, urlparse
 
@@ -192,39 +192,50 @@ class AutoShutdownFuture:
     """A Future object wrapper that shuts down the eventloop and executor when the result is retrieved."""
 
     def __init__(self, future: Future, loop: TEventLoop, executor: Executor):
-        self.future = future
-        self.executor = executor
-        self.loop = loop
+        self._future = future
+        self._executor = executor
+        self._loop = loop
 
     def result(
         self, timeout: Optional[float] = None
     ) -> Union[List[FileValidator], None]:
-        result = self.future.result(timeout)
-        self.loop.stop()
-        self.executor.shutdown()
+        result = self._future.result(timeout)
+        self._loop.stop()
+        self._executor.shutdown()
         return result
 
 
 class EFuture:
     """A Future object wrapper that cancels the future and clears the eventloop when stopped."""
 
-    def __init__(self, future: Future, loop: TEventLoop):
-        self.future = future
-        self.loop = loop
+    def __init__(self, future: Future, loop: TEventLoop, interrupt: Event):
+        self._future = future
+        self._loop = loop
+        self._interrupt = interrupt
 
     def result(
         self, timeout: Optional[float] = None
     ) -> Union[List[FileValidator], None]:
-        return self.future.result(timeout)
+        try:
+            while not self._future.done():
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self._stop()
+            self._loop.stop()
+            raise
+
+        if self._future.done():
+            return self._future.result(timeout)
 
     def _stop(self) -> None:
-        self.loop.call_soon_threadsafe(self.future.cancel)
+        self._loop.call_soon_threadsafe(self._future.cancel)
         try:
             self.result()
         except CancelledError:
             pass
 
-        self.loop.clear_wait()
+        self._loop.clear_wait()
+        self._interrupt.set()
 
 
 class ScreenCleaner:

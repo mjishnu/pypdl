@@ -157,7 +157,9 @@ class Pypdl:
         coro = self._download_tasks(task_dict, display, clear_terminal)
 
         self._future = utils.EFuture(
-            asyncio.run_coroutine_threadsafe(coro, self._loop.get()), self._loop
+            asyncio.run_coroutine_threadsafe(coro, self._loop.get()),
+            self._loop,
+            self._interrupt,
         )
 
         while self.is_idle:
@@ -223,7 +225,6 @@ class Pypdl:
             self._logger.debug("Task not running, nothing to stop")
             return None
         self._future._stop()
-        self._interrupt.set()
 
     def shutdown(self) -> None:
         """Shutdown the download manager."""

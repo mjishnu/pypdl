@@ -1,5 +1,6 @@
 import asyncio
-from .utils import get_filepath, Size, get_range, get_url
+
+from .utils import Size, get_filepath, get_range, get_url
 
 
 class Producer:

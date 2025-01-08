@@ -1,14 +1,14 @@
+import json
+import logging
 import os
+import re
 import shutil
 import sys
 import tempfile
-import unittest
-from pathlib import Path
-import warnings
-import logging
-import re
-import json
 import time
+import unittest
+import warnings
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -32,7 +32,7 @@ class TestPypdl(unittest.TestCase):
         )
         warnings.filterwarnings(
             "ignore",
-            message="unclosed transport <_ProactorSocketTransport",
+            message="unclosed transport",
             category=ResourceWarning,
         )
 

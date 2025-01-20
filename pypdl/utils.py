@@ -19,6 +19,20 @@ BLOCKS = 1024
 CHUNKSIZE = BLOCKSIZE * BLOCKS
 
 
+class MainThreadException(Exception):
+    pass
+
+
+class Size:
+    def __init__(self, start: int, end: int) -> None:
+        self.start = start
+        self.end = end
+        self.value = end - start + 1  # since range is inclusive[0-99 -> 100]
+
+    def __repr__(self) -> str:
+        return str(self.value)
+
+
 class Task:
     def __init__(
         self,
@@ -103,16 +117,6 @@ class Task:
 
     def __repr__(self) -> str:
         return f"Task(url={self.url}, file_path={self.file_path}, tries={self.tries}, size={self.size})"
-
-
-class Size:
-    def __init__(self, start: int, end: int) -> None:
-        self.start = start
-        self.end = end
-        self.value = end - start + 1  # since range is inclusive[0-99 -> 100]
-
-    def __repr__(self) -> str:
-        return str(self.value)
 
 
 class TEventLoop:
@@ -277,6 +281,11 @@ def seconds_to_hms(sec: float) -> str:
 def cursor_up() -> None:
     sys.stdout.write("\x1b[1A" * 2)  # Move cursor up two lines
     sys.stdout.flush()
+
+
+def check_main_thread_exception(e: Exception) -> None:
+    if str(e) == "cannot schedule new futures after shutdown":
+        raise MainThreadException from e
 
 
 async def get_url(url: Union[str, Callable]) -> str:

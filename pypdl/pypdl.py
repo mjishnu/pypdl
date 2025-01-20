@@ -104,6 +104,7 @@ class Pypdl:
         :param multisegment: Whether to download in multiple segments.
         :param segments: Number of segments if multi-segmented.
         :param retries: Number of retries for failed downloads.
+        :param mirrors: List of mirrors (callable/string) or callable/string.
         :param overwrite: Overwrite existing files if True.
         :param speed_limit: Limit download speed in MB/s if > 0.
         :param etag_validation: Validate server-provided ETag if True.
@@ -184,33 +185,40 @@ class Pypdl:
         self._producer_queue = asyncio.Queue(self.total_task)
         self._consumer_queue = asyncio.Queue(self.total_task)
 
-        async with aiohttp.ClientSession() as session:
-            self._producer = Producer(session, self._logger, tasks_dict)
-            producer_task = asyncio.create_task(
-                self._producer.enqueue_tasks(self._producer_queue, self._consumer_queue)
-            )
-            coroutines.append(producer_task)
-            await self._producer_queue.put(list(tasks_dict))
-
-            for _id in range(self._max_concurrent):
-                consumer = Consumer(session, self._logger, _id)
-                consumer_task = asyncio.create_task(
-                    consumer.process_tasks(
-                        self._consumer_queue,
-                        self._producer_queue,
+        try:
+            async with aiohttp.ClientSession() as session:
+                self._producer = Producer(session, self._logger, tasks_dict)
+                producer_task = asyncio.create_task(
+                    self._producer.enqueue_tasks(
+                        self._producer_queue, self._consumer_queue
                     )
                 )
-                coroutines.append(consumer_task)
-                self._consumers.append(consumer)
+                coroutines.append(producer_task)
+                await self._producer_queue.put(list(tasks_dict))
 
-            self._logger.debug("Starting producer and consumer tasks")
-            self._pool.submit(self._progress_monitor, display, clear_terminal)
+                for _id in range(self._max_concurrent):
+                    consumer = Consumer(session, self._logger, _id)
+                    consumer_task = asyncio.create_task(
+                        consumer.process_tasks(
+                            self._consumer_queue,
+                            self._producer_queue,
+                        )
+                    )
+                    coroutines.append(consumer_task)
+                    self._consumers.append(consumer)
 
-            res = await utils.auto_cancel_gather(*coroutines)
-            self.failed.extend(res.pop(0))
-            for success in res:
-                self.success.extend(success)
-            await asyncio.sleep(0.5)
+                self._logger.debug("Starting producer and consumer tasks")
+                self._pool.submit(self._progress_monitor, display, clear_terminal)
+
+                res = await utils.auto_cancel_gather(*coroutines)
+                self.failed.extend(res.pop(0))
+                for success in res:
+                    self.success.extend(success)
+                await asyncio.sleep(0.5)
+        except utils.MainThreadException as e:
+            self._interrupt.set()
+            self._logger.exception(e)
+            raise e
 
         self.time_spent = time.time() - start_time
         if display:
@@ -264,13 +272,6 @@ class Pypdl:
                 time.sleep(interval)
         self._logger.debug("exiting progress monitor")
 
-    async def _completed(self):
-        self._logger.debug("All downloads completed")
-        await self._producer_queue.put(None)
-        for _ in range(self._max_concurrent):
-            await self._consumer_queue.put(None)
-        self.completed = True
-
     def _calc_values(self, recent_queue, interval):
         self.size = self._producer.size
         self.current_size = sum(consumer.size for consumer in self._consumers)
@@ -307,6 +308,13 @@ class Pypdl:
             )
             future.result()
 
+    async def _completed(self):
+        self._logger.debug("All downloads completed")
+        await self._producer_queue.put(None)
+        for _ in range(self._max_concurrent):
+            await self._consumer_queue.put(None)
+        self.completed = True
+
     def _display(self):
         utils.cursor_up()
         whitespace = " "
@@ -318,7 +326,7 @@ class Pypdl:
             else:
                 info1 = ""
 
-            info2 = f"Size: {utils.to_mb(self.size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: { utils.seconds_to_hms(self.eta)}"
+            info2 = f"Size: {utils.to_mb(self.size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: {utils.seconds_to_hms(self.eta)}"
             print(progress_bar + info1 + info2 + whitespace * 35)
         else:
             if self.total_task > 1:

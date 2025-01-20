@@ -1,6 +1,6 @@
 import asyncio
 
-from .utils import Size, get_filepath, get_range, get_url
+from .utils import Size, get_filepath, get_range, get_url, check_main_thread_exception
 
 
 class Producer:
@@ -46,6 +46,7 @@ class Producer:
                     except asyncio.CancelledError:
                         raise
                     except Exception as e:
+                        check_main_thread_exception(e)
                         self.logger.debug(
                             f"Failed to get header for {task}, skipping task"
                         )

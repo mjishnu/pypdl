@@ -8,6 +8,7 @@ from .utils import (
     auto_cancel_gather,
     combine_files,
     create_segment_table,
+    check_main_thread_exception,
 )
 
 
@@ -35,14 +36,15 @@ class Consumer:
         self.logger.debug("Consumer %s started", self.id)
         while True:
             task = await in_queue.get()
-            self.logger.debug("Consumer %s received task", self.id)
             if task is None:
                 break
+            self.logger.debug("Consumer %s received task", self.id)
             try:
                 await self._download(task)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
+                check_main_thread_exception(e)
                 self.logger.debug("Task %s failed", self.id)
                 self.logger.exception(e)
                 await out_queue.put([task[0]])

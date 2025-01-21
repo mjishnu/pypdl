@@ -54,7 +54,6 @@ class Consumer:
 
             self.logger.debug("Consumer %s completed task", self.id)
         self.logger.debug("Consumer %s exited", self.id)
-        return self.success
 
     async def _download(
         self,
@@ -77,7 +76,7 @@ class Consumer:
         self.logger.debug("Download started %s", self.id)
         if not overwrite and await os.path.exists(file_path):
             self.logger.debug("File already exists, download completed")
-            self.success.append(FileValidator(file_path))
+            self.success.append((url, FileValidator(file_path)))
             self._downloaded_size += await os.path.getsize(file_path)
             return
 

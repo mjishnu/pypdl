@@ -209,11 +209,7 @@ class Pypdl:
 
                 self._logger.debug("Starting producer and consumer tasks")
                 self._pool.submit(self._progress_monitor, display, clear_terminal)
-
-                res = await utils.auto_cancel_gather(*coroutines)
-                self.failed.extend(res.pop(0))
-                for success in res:
-                    self.success.extend(success)
+                await utils.auto_cancel_gather(*coroutines)
                 await asyncio.sleep(0.5)
         except utils.MainThreadException as e:
             self._interrupt.set()
@@ -275,11 +271,9 @@ class Pypdl:
     def _calc_values(self, recent_queue, interval):
         self.size = self._producer.size
         self.current_size = sum(consumer.size for consumer in self._consumers)
-
-        self.completed_task = sum(
-            len(consumer.success) for consumer in self._consumers
-        ) + len(self._producer.failed)
-
+        self.success = sum([consumer.success for consumer in self._consumers], [])
+        self.failed = self._producer.failed
+        self.completed_task = len(self.success) + len(self.failed)
         self.task_progress = int((self.completed_task / self.total_task) * 100)
 
         # Speed calculation

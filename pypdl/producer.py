@@ -91,7 +91,6 @@ class Producer:
             else:
                 self._size += total_size
         self.logger.debug("Producer exited")
-        return self.failed
 
     async def _fetch_task_info(self, url, file_path, multisegment, **kwargs):
         url = await get_url(url)

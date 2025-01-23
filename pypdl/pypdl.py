@@ -30,6 +30,8 @@ class Pypdl:
         self._logger = logger
         self._max_concurrent = max_concurrent
         self._future = None
+        self._success = []
+        self._failed = []
 
         self.size = None
         self.current_size = None
@@ -42,8 +44,6 @@ class Pypdl:
         self.completed_task = None
         self.task_progress = None
         self.completed = False
-        self.success = []
-        self.failed = []
 
     @property
     def is_idle(self) -> bool:
@@ -56,6 +56,16 @@ class Pypdl:
         if self.is_idle:
             return self._logger
         return None
+
+    @property
+    def success(self) -> list:
+        """Return list of successful downloads"""
+        return self._success
+
+    @property
+    def failed(self) -> list:
+        """Return list of failed downloads"""
+        return self._failed
 
     def set_allow_reuse(self, allow_reuse) -> bool:
         """Returns True if allow_reuse was successfully set, otherwise returns False"""
@@ -220,7 +230,7 @@ class Pypdl:
         if display:
             print(f"Time elapsed: {utils.seconds_to_hms(self.time_spent)}")
 
-        return self.success
+        return self._success
 
     def stop(self) -> None:
         """Stop the download manager."""
@@ -253,8 +263,8 @@ class Pypdl:
         self.completed_task = None
         self.task_progress = None
         self.completed = False
-        self.success.clear()
-        self.failed.clear()
+        self._success.clear()
+        self._failed.clear()
 
     def _progress_monitor(self, display, clear_terminal):
         self._logger.debug("Starting progress monitor")
@@ -271,9 +281,9 @@ class Pypdl:
     def _calc_values(self, recent_queue, interval):
         self.size = self._producer.size
         self.current_size = sum(consumer.size for consumer in self._consumers)
-        self.success = sum([consumer.success for consumer in self._consumers], [])
-        self.failed = self._producer.failed
-        self.completed_task = len(self.success) + len(self.failed)
+        self._success = sum([consumer.success for consumer in self._consumers], [])
+        self._failed = self._producer.failed
+        self.completed_task = len(self._success) + len(self._failed)
         self.task_progress = int((self.completed_task / self.total_task) * 100)
 
         # Speed calculation

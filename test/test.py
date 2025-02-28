@@ -270,6 +270,13 @@ class TestPypdl(unittest.TestCase):
         self.assertTrue(dl.progress >= progress)
         dl.shutdown()
 
+    def test_failed(self):
+        dl = Pypdl()
+        url = "http://fake_website/file"
+        file_path = os.path.join(self.temp_dir, "test.dat")
+        dl.start(url, file_path, display=False)
+        self.assertEqual(len(dl.failed), 1, "Failed downloads not found")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

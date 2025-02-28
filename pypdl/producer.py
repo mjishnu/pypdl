@@ -26,9 +26,9 @@ class Producer:
 
     def add_failed(self, item):
         with self._lock:
-            self._failed.append
+            self._failed.append(item)
 
-    async def enqueue_tasks(self, in_queue: asyncio.queues, out_queue):
+    async def enqueue_tasks(self, in_queue, out_queue):
         self._logger.debug("Producer started")
         while True:
             batch = await in_queue.get()

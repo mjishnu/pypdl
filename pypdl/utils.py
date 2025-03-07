@@ -17,6 +17,7 @@ MEGABYTE = 1048576
 BLOCKSIZE = 4096
 BLOCKS = 1024
 CHUNKSIZE = BLOCKSIZE * BLOCKS
+MAX_FILENAME_LENGTH = 255
 
 
 class MainThreadException(Exception):
@@ -317,16 +318,71 @@ async def auto_cancel_gather(*args, **kwargs) -> List:
 
 
 async def get_filepath(url: str, headers: Dict[str, str], file_path: str) -> str:
-    content_disposition = headers.get("Content-Disposition", None)
+    # Try to get filename from Content-Disposition header
+    filename = None
+    content_disposition = headers.get("Content-Disposition", "")
 
-    if content_disposition and "filename=" in content_disposition:
-        filename_start = content_disposition.index("filename=") + len("filename=")
-        filename = content_disposition[filename_start:]  # Get name from headers
-        filename = unquote(filename.strip('"'))  # Decode URL encodings
-    else:
-        filename = unquote(urlparse(url).path.split("/")[-1])  # Generate name from URL
+    # Check for filename* parameter (RFC 6266)
+    if "filename*=" in content_disposition:
+        try:
+            start_pos = content_disposition.find("filename*=") + len("filename*=")
+            end_pos = content_disposition.find(";", start_pos)
+            encoded_filename = content_disposition[
+                start_pos : end_pos if end_pos > 0 else None
+            ]
 
-    filename = filename.replace("/", "_")
+            if "'" in encoded_filename:
+                parts = encoded_filename.split("'", 2)
+                if len(parts) == 3:
+                    _, _, encoded_part = parts
+                    filename = unquote(encoded_part.strip())
+        except Exception:
+            filename = None
+
+    if not filename and "filename=" in content_disposition:
+        try:
+            start_pos = content_disposition.find("filename=") + len("filename=")
+            # Handle quoted filenames
+            if content_disposition[start_pos : start_pos + 1] == '"':
+                end_pos = content_disposition.find('"', start_pos + 1)
+                if end_pos > start_pos:
+                    filename = content_disposition[start_pos + 1 : end_pos]
+            else:
+                # Non-quoted filename - read until semicolon or end
+                end_pos = content_disposition.find(";", start_pos)
+                filename = content_disposition[
+                    start_pos : end_pos if end_pos > 0 else None
+                ]
+
+            filename = unquote(filename.strip())
+        except Exception:
+            filename = None
+
+    # Fallback to URL if filename wasn't found
+    if not filename:
+        path_part = urlparse(url).path
+        filename = unquote(path_part.split("/")[-1])
+
+        if not filename or filename.startswith("?"):
+            domain = urlparse(url).netloc.split(":")[0]  # Remove port if present
+            filename = domain or "download"
+
+    # Sanitize filename to avoid OS errors (replace invalid chars)
+    invalid_chars = ["<", ">", ":", '"', "/", "\\", "|", "?", "*"]
+    for char in invalid_chars:
+        filename = filename.replace(char, "_")
+
+    # If filename is still empty after all processing, use a default name
+    if not filename:
+        filename = "download"
+
+    # Trim to reasonable filename length
+    if len(filename.encode("utf-8")) > MAX_FILENAME_LENGTH:
+        name, ext = path.splitext(filename)
+        max_name_len = MAX_FILENAME_LENGTH - len(ext.encode("utf-8"))
+        filename = (
+            name.encode("utf-8")[:max_name_len].decode("utf-8", errors="ignore") + ext
+        )
 
     if file_path:
         if await aio_os.path.isdir(file_path):

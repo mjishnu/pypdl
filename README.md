@@ -480,12 +480,13 @@ The `FileValidator` class is used to validate the integrity of the downloaded fi
 
 #### `AutoShutdownFuture()`
 
-The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object that shuts down a list of associated executors when the result is retrieved.
+The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object that shuts down the eventloop and executor when the result is retrieved.
 
 ##### Parameters
 
 - `future`: The Future object to be wrapped.
-- `executors`: The list of executors to be shut down when the result is retrieved.
+- `executor`: The executor to be shut down when the result is retrieved.
+- `loop`: The eventloop to be stopped when result is retrieved.
 
 ##### Methods
 

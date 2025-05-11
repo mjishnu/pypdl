@@ -105,7 +105,7 @@ Each option is explained below:
     - `proxy`: Proxy URL. The default value is `None`.
     - `proxy_auth`: An object that represents proxy HTTP Basic Authorization. The default value is `None`.
     - `timeout`: (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout. The default value is `aiohttp.ClientTimeout(sock_read=60)`.
-    - `ssl`: SSL validation mode. The default value is `None`.
+    - `ssl`: SSL validation mode. The default value is `True`.
     - `proxy_headers`: HTTP headers to send to the proxy if the `proxy` parameter has been provided. The default value is `None`.
 
     For detailed information on each parameter, refer the [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_reference.html#aiohttp.ClientSession.request). Please ensure that only the *supported keyword arguments* are used. Using unsupported or irrelevant keyword arguments may lead to unexpected behavior or errors.
@@ -411,7 +411,7 @@ block=True
         - `proxy`: Proxy URL. The default value is `None`.
         - `proxy_auth`: An object that represents proxy HTTP Basic Authorization. The default value is `None`.
         - `timeout`: (default `aiohttp.ClientTimeout(sock_read=60)`): Override the session’s timeout. The default value is `aiohttp.ClientTimeout(sock_read=60)`.
-        - `ssl`: SSL validation mode. The default value is `None`.
+        - `ssl`: SSL validation mode. The default value is `True`.
         - `proxy_headers`: HTTP headers to send to the proxy if the `proxy` parameter has been provided. The default value is `None`.
 
         For detailed information on each parameter, refer the [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_reference.html#aiohttp.ClientSession.request). Please ensure that only the *supported keyword arguments* are used. Using unsupported or irrelevant keyword arguments may lead to unexpected behavior or errors.
@@ -480,12 +480,13 @@ The `FileValidator` class is used to validate the integrity of the downloaded fi
 
 #### `AutoShutdownFuture()`
 
-The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object that shuts down a list of associated executors when the result is retrieved.
+The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object that shuts down the eventloop and executor when the result is retrieved.
 
 ##### Parameters
 
 - `future`: The Future object to be wrapped.
-- `executors`: The list of executors to be shut down when the result is retrieved.
+- `executor`: The executor to be shut down when the result is retrieved.
+- `loop`: The eventloop to be stopped when result is retrieved.
 
 ##### Methods
 

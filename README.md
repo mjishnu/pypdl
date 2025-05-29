@@ -420,7 +420,7 @@ block=True
     
     - `AutoShutdownFuture`: If `block` and `allow_reuse` is  set to `False`.
     - `EFuture`: If `block` is `False` and `allow_reuse` is `True`.
-    - `FileValidator`: If `block` is `True` and the download is successful.
+    - `List`: If `block` is `True` and the download is successful. Returns a list of tuples, where each tuple contains the URL and a `FileValidator` object for that URL.
     - `None`: If `block` is `True` and the download fails.
 
 - `stop()`: Stops the download process.

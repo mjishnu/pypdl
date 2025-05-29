@@ -89,6 +89,7 @@ class Producer:
                                 task.overwrite,
                                 task.speed_limit,
                                 task.etag_validation,
+                                task.hash_algorithms,
                                 kwargs,
                             ),
                         )

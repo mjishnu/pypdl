@@ -43,6 +43,7 @@ class Task:
         overwrite: bool,
         speed_limit: Union[float, int],
         etag_validation: bool,
+        hash_algorithms: List[str],
         **kwargs,
     ):
         self.url = None
@@ -56,6 +57,7 @@ class Task:
         self.speed_limit = speed_limit
         self.etag_validation = etag_validation
         self.size = Size(0, 0)
+        self.hash_algorithms = hash_algorithms
         self.kwargs = kwargs if kwargs else {}
 
     def set(self, **kwargs) -> None:
@@ -180,17 +182,32 @@ class FileValidator:
 
     def __init__(self, path: str):
         self.path = path
+        self.cache = {}
 
-    def calculate_hash(self, algorithm: str, **kwargs) -> str:
-        hash_obj = hashlib.new(algorithm, **kwargs)
-        with open(self.path, "rb") as file:
-            for chunk in iter(lambda: file.read(4096), b""):
-                hash_obj.update(chunk)
-        return hash_obj.hexdigest()
+    async def _calculate_hash(self, algorithms: list[str]) -> None:
+        hash_objects = {}
 
-    def validate_hash(self, correct_hash: str, algorithm: str, **kwargs) -> bool:
-        file_hash = self.calculate_hash(algorithm, **kwargs)
-        return file_hash == correct_hash
+        for algorithm in algorithms:
+            if algorithm not in self.cache:
+                hash_objects[algorithm] = hashlib.new(algorithm)
+
+        async with fopen(self.path, "rb") as file:
+            while chunk := await file.read(4096):
+                for hash_object in hash_objects.values():
+                    hash_object.update(chunk)
+
+        for algorithm, hash_object in hash_objects.items():
+            self.cache[algorithm] = hash_object.hexdigest()
+
+    def get_hash(self, algorithm: str) -> str:
+        """Get the hash of the file for the specified algorithm."""
+        if algorithm not in self.cache:
+            asyncio.run(self._calculate_hash([algorithm]))
+        return self.cache[algorithm]
+
+    def validate_hash(self, correct_hash: str, algorithm: str) -> bool:
+        file_hash = self.get_hash(algorithm)
+        return bytes.fromhex(file_hash) == bytes.fromhex(correct_hash)
 
 
 class AutoShutdownFuture:

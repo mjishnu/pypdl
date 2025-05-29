@@ -100,6 +100,7 @@ class Pypdl:
         overwrite: bool = True,
         speed_limit: float = 0,
         etag_validation: bool = True,
+        hash_algorithms: list = [],
         block: bool = True,
         display: bool = True,
         clear_terminal: bool = True,
@@ -159,6 +160,7 @@ class Pypdl:
                 overwrite,
                 speed_limit,
                 etag_validation,
+                hash_algorithms,
                 **_kwargs,
             )
             task.set(**task_kwargs)

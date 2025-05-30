@@ -3,7 +3,7 @@ import time
 from collections import deque
 from logging import Logger
 from threading import Event
-from typing import Callable, Union, List
+from typing import Callable, List, Union
 
 import aiohttp
 

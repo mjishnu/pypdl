@@ -3,7 +3,7 @@ import time
 from collections import deque
 from logging import Logger
 from threading import Event
-from typing import Callable, Union
+from typing import Callable, Union, List
 
 import aiohttp
 
@@ -58,12 +58,12 @@ class Pypdl:
         return None
 
     @property
-    def success(self) -> list:
+    def success(self) -> List:
         """Return list of successful downloads"""
         return self._success
 
     @property
-    def failed(self) -> list:
+    def failed(self) -> List:
         """Return list of failed downloads"""
         return self._failed
 
@@ -92,20 +92,21 @@ class Pypdl:
         self,
         url: Union[Callable, str] = None,
         file_path: str = None,
-        tasks: list = None,
+        tasks: List = None,
         multisegment: bool = True,
         segments: int = 5,
         retries: int = 0,
-        mirrors: Union[str, list, Callable] = None,
+        mirrors: Union[str, List, Callable] = None,
         overwrite: bool = True,
         speed_limit: float = 0,
         etag_validation: bool = True,
-        hash_algorithms: list = [],
+        hash_algorithms: Union[str, List] = None,
+        callback: Callable = None,
         block: bool = True,
         display: bool = True,
         clear_terminal: bool = True,
         **kwargs,
-    ) -> Union[utils.EFuture, utils.AutoShutdownFuture, list]:
+    ) -> Union[utils.EFuture, utils.AutoShutdownFuture, List]:
         """
         Start the download process.
 
@@ -119,6 +120,8 @@ class Pypdl:
         :param overwrite: Overwrite existing files if True.
         :param speed_limit: Limit download speed in MB/s if > 0.
         :param etag_validation: Validate server-provided ETag if True.
+        :param hash_algorithms: List of hash algorithms (list) or (string) to validate downloaded files.
+        :param callback: Callback function to call after each download.
         :param block: If True, block until downloads finish.
         :param display: If True, display progress.
         :param clear_terminal: If True, clear terminal before displaying progress bar.
@@ -161,6 +164,7 @@ class Pypdl:
                 speed_limit,
                 etag_validation,
                 hash_algorithms,
+                callback,
                 **_kwargs,
             )
             task.set(**task_kwargs)

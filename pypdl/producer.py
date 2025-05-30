@@ -1,7 +1,14 @@
 import asyncio
 from threading import Lock
 
-from .utils import Size, check_main_thread_exception, get_filepath, get_range, get_url
+from .utils import (
+    Size,
+    check_main_thread_exception,
+    get_filepath,
+    get_range,
+    get_url,
+    run_callback,
+)
 
 
 class Producer:
@@ -24,9 +31,13 @@ class Producer:
         with self._lock:
             return self._failed.copy()
 
-    def add_failed(self, item):
+    def add_failed(self, url, callback):
+        if callback:
+            self._logger.debug("Executing callback for failed URL: %s", url)
+            run_callback(callback, False, None, self._logger)
+
         with self._lock:
-            self._failed.append(item)
+            self._failed.append(url)
 
     async def enqueue_tasks(self, in_queue, out_queue):
         self._logger.debug("Producer started")
@@ -89,12 +100,14 @@ class Producer:
                                 task.overwrite,
                                 task.speed_limit,
                                 task.etag_validation,
+                                task.hash_algorithms,
+                                task.callback,
                                 kwargs,
                             ),
                         )
                     )
                 else:
-                    self.add_failed(task.url)
+                    self.add_failed(task.url, task.callback)
 
             if self._size is None:
                 self._size = total_size

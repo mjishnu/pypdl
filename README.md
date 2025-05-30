@@ -47,21 +47,23 @@ The `Pypdl` object provides additional options for advanced usage:
 ```py
 from pypdl import Pypdl
 
-dl = Pypdl(allow_reuse=False, logger=default_logger("Pypdl"), max_concurrent: int = 1)
+dl = Pypdl(allow_reuse=False, logger=default_logger("Pypdl"), max_concurrent=1)
 dl.start(
-    url=None,
-    file_path=None,
-    tasks=None,
-    multisegment=True,
-    segments=5,
-    overwrite=True,
-    etag=True,
-    retries=0,
-    mirrors=None,
-    display=True,
-    clear_terminal=True,
-    block=True,
-    **kwargs
+    url: Union[Callable, str] = None,
+    file_path: str = None,
+    tasks: List = None,
+    multisegment: bool = True,
+    segments: int = 5,
+    retries: int = 0,
+    mirrors: Union[str, List, Callable] = None,
+    overwrite: bool = True,
+    speed_limit: float = 0,
+    etag_validation: bool = True,
+    hash_algorithms: Union[str, List] = None,
+    callback: Callable = None,
+    block: bool = True,
+    display: bool = True,
+    clear_terminal: bool = True,
 )
 ```
 
@@ -75,23 +77,29 @@ Each option is explained below:
     - `url` (required): The URL of the file to download.
     - Optional keys (The default value is set by the `Pypdl` start method):
         - `file_path`: path to save the downloaded file.
-        - `multisegment`: Whether to use multi-segmented download.
+        - `multisegment`: Whether to use multi-segmented download. 
         - `segments`: The number of segments the file should be divided into for multi-segmented download.
-        - `overwrite`: Whether to overwrite the file if it already exists.
-        - `etag`: Whether to validate the ETag before resuming downloads.
         - `retries`: The number of times to retry the download in case of an error.
-    - `mirrors`(optional): The mirror URLs to be used if the primary URL fails.The default value is `None`.
-    - Additonal supported keyword arguments of `Pypdl` start method.
+        - `mirrors`: The mirror URLs to be used if the primary URL fails.
+        - `overwrite`: Whether to overwrite the file if it already exists. 
+        - `speed_limit`: The maximum download speed in MB/s. 
+        - `etag_validation`: Whether to validate the ETag before resuming downloads.
+        - `hash_algorithms`: The hash algorithms to be used for precomputation of hash values.
+        - `callback`: A callback function to be called when the download is complete.
+    - Additional supported keyword arguments of `Pypdl` start method.
     
 - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
 - `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 5.
-- `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
-- `etag`: Whether to validate the ETag before resuming downloads. The default value is `True`.
 - `retries`: The number of times to retry the download in case of an error. The default value is 0.
 - `mirrors`: The mirror URLs to be used if the primary URL fails. The default value is `None`. It can be a callable (functions, coroutines), string or List of callables, strings or both.
+- `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
+- `speed_limit`: The maximum download speed in MB/s. The default value is 0.
+- `etag_validation`: Whether to validate the ETag before resuming downloads. The default value is `True`.
+- `hash_algorithms`: The hash algorithms to be used for precomputation of hash values. It can be a string or a list of strings. The default value is `None`.
+- `callback`: A callback function to be called when the download is complete. The default value is `None`. The function must accept 2 positional parameters: `status` (bool) indicating if the download was successful, and `result` (FileValidator object if successful, None if failed).
+- `block`: Whether to block until the download is complete. The default value is `True`.
 - `display`: Whether to display download progress and other optional messages. The default value is `True`.
 - `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
-- `block`: Whether to block until the download is complete. The default value is `True`.
 
 - Supported Keyword Arguments:
     - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
@@ -138,7 +146,7 @@ def main():
         multisegment=True,
         block=True,
         retries=3,
-        etag=True,
+        etag_validation=True,
         headers=headers, 
         proxy=proxy, 
         timeout=timeout
@@ -180,7 +188,7 @@ dl.stop()
 future = dl.start('https://example.com/file.zip', segments=8,block=False,display=False)
 
 # print rest of the progress
-while not d.completed:
+while not dl.completed:
   print(dl.progress)
 
 # get the result, calling result() on future is essential when block=False so everything is properly cleaned up
@@ -326,15 +334,43 @@ dl.start(tasks=task2, display=True, block=True)
 # shutdown the downloader, this is essential when allow_reuse is enabled
 dl.shutdown()
 ```
-For more detailed info about parameters refer [API reference](https://github.com/mjishnu/pypdl?tab=readme-ov-file#pypdlfactory)
+Another example of using precomputed hash for parallel calculation and validation of hash using callbacks
+
+```py
+from pypdl import pypdl
+
+# create a pypdl object with max_concurrent set to 2
+dl = pypdl(max_concurrent=2)
+
+# List of tasks to be downloaded..
+tasks = [
+    {'url':'https://example.com/file1.zip', 'file_path': 'file1.zip'},
+    {'url':'https://example.com/file2.zip', 'file_path': 'file2.zip'},
+    {'url':'https://example.com/file3.zip', 'file_path': 'file3.zip'},
+    {'url':'https://example.com/file4.zip', 'file_path': 'file4.zip'},
+    {'url':'https://example.com/file5.zip', 'file_path': 'file5.zip'},
+]
+
+# Callback requires 2 positional arguments
+# status: bool indicating download success
+# result: FileValidator object if successful, None if failed
+def callback_func(status, result):
+    if status == True:
+        result.validate_hash(correct_hash=correct_hash, algorithm='sha256')
+        # do something 
+
+# hash_algorithms can be a list for multiple hashes: ['sha256', 'md5']
+# Hashes are computed during download and cached into FileValidator
+dl.start(tasks=tasks, hash_algorithms='sha256', callback=callback_func)
+```
 ## API Reference
 
 ### `Pypdl()`
 
-The `Pypdl` class represents a file downloader that can download a file from a given URL to a specified file path. The class supports both single-segmented and multi-segmented downloads and many other features like retry download incase of failure and option to continue downloading using a different url if necessary, pause/resume functionality, progress tracking etc.
+The `Pypdl` class represents a file downloader that can download a file from a given URL to a specified file path. The class supports both single-segmented and multi-segmented downloads and many other features like retry download in case of failure and option to continue downloading using a different url if necessary, pause/resume functionality, progress tracking etc.
 
 #### Arguments
-- `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `Pypdl` object for next download. The default value is `False`.It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
+- `allow_reuse`: (bool, Optional) Whether to allow reuse of existing `Pypdl` object for next download. The default value is `False`. It's essential to use `shutdown()` method when `allow_reuse` is enabled to ensure efficient resource management.
 
 - `logger`: (logging.Logger, Optional) A logger object to log messages. The default value is custom `Logger` with the name *Pypdl*.
 
@@ -360,18 +396,22 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 
 #### Methods
 
-- `start(url=None,
-file_path=None,
-tasks=None,
-multisegment=True,
-segments=5,
-overwrite=True,
-etag=True,
-retries=0,
-display=True,
-clear_terminal=True,
-block=True
-**kwargs)`: Starts the download process.
+- `start(url = None,
+    file_path = None,
+    tasks = None,
+    multisegment = True,
+    segments = 5,
+    retries = 0,
+    mirrors = None,
+    overwrite = True,
+    speed_limit = 0,
+    etag_validation = True,
+    hash_algorithms = None,
+    callback = None,
+    block = True,
+    display = True,
+    clear_terminal = True
+)`: Starts the download process.
 
     ##### Parameters
 
@@ -381,23 +421,29 @@ block=True
         - `url` (required): The URL of the file to download.
         - Optional keys (The default value is set by the `Pypdl` start method):
             - `file_path`: path to save the downloaded file.
-            - `multisegment`: Whether to use multi-segmented download.
+            - `multisegment`: Whether to use multi-segmented download. 
             - `segments`: The number of segments the file should be divided into for multi-segmented download.
-            - `overwrite`: Whether to overwrite the file if it already exists.
-            - `etag`: Whether to validate the ETag before resuming downloads.
             - `retries`: The number of times to retry the download in case of an error.
-        - `mirrors`(optional): The mirror URLs to be used if the primary URL fails.The default value is `None`.
-        - Additonal supported keyword arguments of `Pypdl` start method.
+            - `mirrors`: The mirror URLs to be used if the primary URL fails.
+            - `overwrite`: Whether to overwrite the file if it already exists. 
+            - `speed_limit`: The maximum download speed in MB/s.
+            - `etag_validation`: Whether to validate the ETag before resuming downloads.
+            - `hash_algorithms`: The hash algorithms to be used for precomputation of hash values.
+            - `callback`: A callback function to be called when the download is complete.
+        - Additional supported keyword arguments of `Pypdl` start method.
         
     - `multisegment`: Whether to use multi-segmented download. The default value is `True`.
     - `segments`: The number of segments the file should be divided into for multi-segmented download. The default value is 5.
-    - `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
-    - `etag`: Whether to validate the ETag before resuming downloads. The default value is `True`.
     - `retries`: The number of times to retry the download in case of an error. The default value is 0.
     - `mirrors`: The mirror URLs to be used if the primary URL fails. The default value is `None`. It can be a callable (functions, coroutines), string or List of callables, strings or both.
+    - `overwrite`: Whether to overwrite the file if it already exists. The default value is `True`.
+    - `speed_limit`: The maximum download speed in MB/s. The default value is 0.
+    - `etag_validation`: Whether to validate the ETag before resuming downloads. The default value is `True`.
+    - `hash_algorithms`: The hash algorithms to be used for precomputation of hash values. It can be a string or a list of strings. The default value is `None`.
+    - `callback`: A callback function to be called when the download is complete. The default value is `None`. The function must accept 2 positional parameters: `status` (bool) indicating if the download was successful, and `result` (FileValidator object if successful, None if failed).
+    - `block`: Whether to block until the download is complete. The default value is `True`.
     - `display`: Whether to display download progress and other optional messages. The default value is `True`.
     - `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
-    - `block`: Whether to block until the download is complete. The default value is `True`.
 
     - Supported Keyword Arguments:
         - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
@@ -420,7 +466,7 @@ block=True
     
     - `AutoShutdownFuture`: If `block` and `allow_reuse` is  set to `False`.
     - `EFuture`: If `block` is `False` and `allow_reuse` is `True`.
-    - `FileValidator`: If `block` is `True` and the download is successful.
+    - `List`: If `block` is `True` and the download is successful. Returns a list of tuples, where each tuple contains the URL and a `FileValidator` object for that URL.
     - `None`: If `block` is `True` and the download fails.
 
 - `stop()`: Stops the download process.
@@ -472,11 +518,9 @@ The `FileValidator` class is used to validate the integrity of the downloaded fi
 
 ##### Methods
 
-- `calculate_hash(algorithm, **kwargs)`: Calculates the hash of the file using the specified algorithm. Returns the calculated hash as a string.
+- `get_hash(algorithm)`: Fetches/calculates the hash of the file using the specified algorithm. Returns the hash as a string.
 
-- `validate_hash(correct_hash, algorithm, **kwargs)`: Validates the hash of the file against the correct hash. Returns `True` if the hashes match, `False` otherwise.
-
-  `calculate_hash` and `validate_hash` can support additional keyword arguments from the [hashlib module](https://docs.python.org/3/library/hashlib.html#hashlib.new).
+- `validate_hash(correct_hash, algorithm)`: Validates the hash of the file against the correct hash. Returns `True` if the hashes match, `False` otherwise.
 
 #### `AutoShutdownFuture()`
 

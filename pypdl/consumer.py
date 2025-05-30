@@ -10,6 +10,7 @@ from .utils import (
     check_main_thread_exception,
     combine_files,
     create_segment_table,
+    run_callback,
 )
 
 
@@ -38,9 +39,18 @@ class Consumer:
         with self._lock:
             return self._success.copy()
 
-    def add_success(self, item):
+    async def add_success(self, url, file_path, hash_algorithms, callback):
+        file_validator = FileValidator(file_path)
+        if hash_algorithms:
+            self._logger.debug("Calculating file hash %s", url)
+            await file_validator._calculate_hash(hash_algorithms)
+
+        if callback:
+            self._logger.debug("Executing callback for %s", url)
+            run_callback(callback, True, file_validator, self._logger)
+
         with self._lock:
-            self._success.append(item)
+            self._success.append((url, file_validator))
 
     async def process_tasks(self, in_queue, out_queue):
         self._logger.debug("Consumer %s started", self._id)
@@ -81,14 +91,16 @@ class Consumer:
             overwrite,
             speed_limit,
             etag_validation,
+            hash_algorithms,
+            callback,
             kwargs,
         ) = task
 
         self._logger.debug("Download started %s", self._id)
         if not overwrite and await os.path.exists(file_path):
             self._logger.debug("File already exists, download completed")
-            self.add_success((url, FileValidator(file_path)))
             self._downloaded_size += await os.path.getsize(file_path)
+            await self.add_success(url, file_path, hash_algorithms, callback)
             return
 
         if multisegment:
@@ -99,7 +111,7 @@ class Consumer:
         else:
             await self._single_segment(url, file_path, speed_limit, **kwargs)
 
-        self.add_success((url, FileValidator(file_path)))
+        await self.add_success(url, file_path, hash_algorithms, callback)
         self._logger.debug("Download exited %s", self._id)
 
     async def _multi_segment(self, segment_table, file_path, speed_limit, **kwargs):

@@ -43,6 +43,8 @@ class Task:
         overwrite: bool,
         speed_limit: Union[float, int],
         etag_validation: bool,
+        hash_algorithms: List[str],
+        callback: Callable,
         **kwargs,
     ):
         self.url = None
@@ -56,6 +58,8 @@ class Task:
         self.speed_limit = speed_limit
         self.etag_validation = etag_validation
         self.size = Size(0, 0)
+        self.hash_algorithms = hash_algorithms
+        self.callback = callback
         self.kwargs = kwargs if kwargs else {}
 
     def set(self, **kwargs) -> None:
@@ -72,6 +76,10 @@ class Task:
 
         if self.mirrors is not None and not isinstance(self.mirrors, list):
             self.mirrors = [self.mirrors]
+
+        if self.hash_algorithms is not None and isinstance(self.hash_algorithms, str):
+            self.hash_algorithms = [self.hash_algorithms]
+
         self.default_url = self.url
 
     def validate(self) -> None:
@@ -114,6 +122,17 @@ class Task:
         if not isinstance(self.etag_validation, bool):
             raise TypeError(
                 f"etag_validation should be of type bool, got {type(self.etag_validation).__name__}"
+            )
+        if not (
+            isinstance(self.hash_algorithms, (list, str))
+            or self.hash_algorithms is None
+        ):
+            raise TypeError(
+                f"hash_algorithms should be of type list or str, got {type(self.hash_algorithms).__name__}"
+            )
+        if not (callable(self.callback) or self.callback is None):
+            raise TypeError(
+                f"callback should be a function, got {type(self.callback).__name__}"
             )
 
     def __repr__(self) -> str:
@@ -180,17 +199,32 @@ class FileValidator:
 
     def __init__(self, path: str):
         self.path = path
+        self._cache = {}
 
-    def calculate_hash(self, algorithm: str, **kwargs) -> str:
-        hash_obj = hashlib.new(algorithm, **kwargs)
-        with open(self.path, "rb") as file:
-            for chunk in iter(lambda: file.read(4096), b""):
-                hash_obj.update(chunk)
-        return hash_obj.hexdigest()
+    async def _calculate_hash(self, algorithms: List[str]) -> None:
+        hash_objects = {}
 
-    def validate_hash(self, correct_hash: str, algorithm: str, **kwargs) -> bool:
-        file_hash = self.calculate_hash(algorithm, **kwargs)
-        return file_hash == correct_hash
+        for algorithm in algorithms:
+            if algorithm not in self._cache:
+                hash_objects[algorithm] = hashlib.new(algorithm)
+
+        async with fopen(self.path, "rb") as file:
+            while chunk := await file.read(4096):
+                for hash_object in hash_objects.values():
+                    hash_object.update(chunk)
+
+        for algorithm, hash_object in hash_objects.items():
+            self._cache[algorithm] = hash_object.hexdigest()
+
+    def get_hash(self, algorithm: str) -> str:
+        """Get the hash of the file for the specified algorithm."""
+        if algorithm not in self._cache:
+            asyncio.run(self._calculate_hash([algorithm]))
+        return self._cache[algorithm]
+
+    def validate_hash(self, correct_hash: str, algorithm: str) -> bool:
+        file_hash = self.get_hash(algorithm)
+        return bytes.fromhex(file_hash) == bytes.fromhex(correct_hash)
 
 
 class AutoShutdownFuture:
@@ -507,3 +541,18 @@ def get_range(range_header: str, file_size: int) -> Tuple[int, int]:
             raise TypeError(f"Invalid range: {start}-{end}")
 
     return start, end
+
+
+def run_callback(
+    func: Callable,
+    status: bool,
+    result: Union[FileValidator, None],
+    logger: logging.Logger,
+) -> None:
+    def _callback():
+        try:
+            func(status, result)
+        except Exception as e:
+            logger.exception(f"Callback function {func.__name__} failed: {e}")
+
+    Thread(target=_callback, daemon=True).start()

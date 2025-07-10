@@ -7,7 +7,7 @@ import time
 from concurrent.futures import CancelledError, Executor, Future, ThreadPoolExecutor
 from os import path
 from threading import Event, Thread
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Union
 from urllib.parse import unquote, urlparse
 
 from aiofiles import open as fopen
@@ -510,37 +510,45 @@ def default_logger(name: str) -> logging.Logger:
     return logger
 
 
-def get_range(range_header: str, file_size: int) -> Tuple[int, int]:
-    def parse_part(part: str) -> Optional[int]:
-        return int(part) if part else None
+def get_range(range_header: str, file_size: int) -> Size:
+    if not range_header or not range_header.lower().startswith("bytes="):
+        raise ValueError('Range header must start with "bytes="')
 
-    range_value = range_header.replace("bytes=", "")
-    parts = range_value.split("-")
-    if len(parts) != 2:
-        raise TypeError("Invalid range format")
+    range_value = range_header.split("=")[1].strip()
+    parts = range_value.split("-", 1)
 
-    start, end = map(parse_part, parts)
+    try:
+        start = int(parts[0]) if parts[0] else None
+        end = int(parts[1]) if parts[1] else None
+    except (ValueError, IndexError):
+        raise ValueError(f"Invalid range format: {range_value}")
 
+    # Case 1: "bytes=start-end"
     if start is not None and end is not None:
-        if start > end:
-            raise TypeError("Invalid range, start is greater than end")
+        pass
+
+    # Case 2: "bytes=start-"
+    elif start is not None and end is None:
+        end = file_size - 1
+
+    # Case 3: "bytes=-suffix_length"
+    elif end is not None and start is None:
+        if end == 0:
+            raise ValueError("Invalid range: suffix length cannot be zero")
+        start = max(0, file_size - end)
+        end = file_size - 1
+
+    # Case 4: Invalid format like "bytes=-"
     else:
-        if file_size == 0:
-            raise TypeError("Invalid range, file size is 0")
+        raise ValueError(f"Invalid range format: {range_value}")
 
-        if end is not None:
-            if end > file_size - 1:
-                raise TypeError("Invalid range, end is greater than file size")
-            start = file_size - end
-            end = file_size - 1
-        elif start is not None:
-            if start > file_size - 1:
-                raise TypeError("Invalid range, start is greater than file size")
-            end = file_size - 1
+    if start > end:
+        if end == -1:  # file_size == 0
+            start = 0
         else:
-            raise TypeError(f"Invalid range: {start}-{end}")
+            raise ValueError(f"Invalid range: start ({start}) > end ({end})")
 
-    return start, end
+    return Size(start, end)
 
 
 def run_callback(

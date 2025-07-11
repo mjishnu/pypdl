@@ -278,22 +278,17 @@ class EFuture:
 
 
 class ScreenCleaner:
-    """A context manager to clear the screen and hide cursor."""
+    """Context manager to hide the terminal cursor and add spacing for cleaner output."""
 
-    def __init__(self, display: bool, clear_terminal: bool):
+    def __init__(self, display: bool):
         self.display = display
-        self.clear_terminal = clear_terminal
-
-    def clear(self) -> None:
-        sys.stdout.write(2 * "\n")
-        if self.clear_terminal:
-            sys.stdout.write("\033c")  # Clear screen
-        sys.stdout.write("\x1b[?25l")  # Hide cursor
-        sys.stdout.flush()
 
     def __enter__(self):
         if self.display:
-            self.clear()
+            sys.stdout.write(2 * "\n")
+            sys.stdout.write("\x1b[?25l")  # Hide cursor
+            sys.stdout.flush()
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -303,7 +298,7 @@ class ScreenCleaner:
 
 
 def to_mb(size_in_bytes: int) -> float:
-    return size_in_bytes / MEGABYTE
+    return max(0, size_in_bytes) / MEGABYTE
 
 
 def seconds_to_hms(sec: float) -> str:
@@ -511,7 +506,7 @@ def default_logger(name: str) -> logging.Logger:
 
 
 def get_range(range_header: str, file_size: int) -> Size:
-    if not range_header or not range_header.lower().startswith("bytes="):
+    if not range_header.lower().startswith("bytes="):
         raise ValueError('Range header must start with "bytes="')
 
     range_value = range_header.split("=")[1].strip()
@@ -525,6 +520,7 @@ def get_range(range_header: str, file_size: int) -> Size:
 
     # Case 1: "bytes=start-end"
     if start is not None and end is not None:
+        # Already parsed correctly
         pass
 
     # Case 2: "bytes=start-"

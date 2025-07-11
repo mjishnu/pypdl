@@ -104,7 +104,6 @@ class Pypdl:
         callback: Callable = None,
         block: bool = True,
         display: bool = True,
-        clear_terminal: bool = True,
         **kwargs,
     ) -> Union[utils.EFuture, utils.AutoShutdownFuture, List]:
         """
@@ -124,7 +123,6 @@ class Pypdl:
         :param callback: Callback function to call after each download.
         :param block: If True, block until downloads finish.
         :param display: If True, display progress.
-        :param clear_terminal: If True, clear terminal before displaying progress bar.
         :param kwargs: Addtional keyword arguments for aiohttp.
         :return: A future-like object if non-blocking, or a result list if blocking.
         :raises RuntimeError: If downloads are already in progress.
@@ -171,7 +169,7 @@ class Pypdl:
             task_dict[i] = task
             self.total_task += 1
 
-        coro = self._download_tasks(task_dict, display, clear_terminal)
+        coro = self._download_tasks(task_dict, display)
 
         self._future = utils.EFuture(
             asyncio.run_coroutine_threadsafe(coro, self._loop.get()),
@@ -194,7 +192,7 @@ class Pypdl:
 
         return future
 
-    async def _download_tasks(self, tasks_dict, display, clear_terminal):
+    async def _download_tasks(self, tasks_dict, display):
         self._logger.debug("Starting download tasks")
         start_time = time.time()
         coroutines = []
@@ -224,7 +222,7 @@ class Pypdl:
                     self._consumers.append(consumer)
 
                 self._logger.debug("Starting producer and consumer tasks")
-                self._pool.submit(self._progress_monitor, display, clear_terminal)
+                self._pool.submit(self._progress_monitor, display)
                 await utils.auto_cancel_gather(*coroutines)
                 await asyncio.sleep(0.5)
         except utils.MainThreadException as e:
@@ -272,11 +270,11 @@ class Pypdl:
         self._success.clear()
         self._failed.clear()
 
-    def _progress_monitor(self, display, clear_terminal):
+    def _progress_monitor(self, display):
         self._logger.debug("Starting progress monitor")
         interval = 0.5
         recent_queue = deque(maxlen=12)
-        with utils.ScreenCleaner(display, clear_terminal):
+        with utils.ScreenCleaner(display):
             while not self.completed and not self._interrupt.is_set():
                 self._calc_values(recent_queue, interval)
                 if display:

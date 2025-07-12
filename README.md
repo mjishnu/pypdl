@@ -63,7 +63,6 @@ dl.start(
     callback: Callable = None,
     block: bool = True,
     display: bool = True,
-    clear_terminal: bool = True,
 )
 ```
 
@@ -99,7 +98,6 @@ Each option is explained below:
 - `callback`: A callback function to be called when the download is complete. The default value is `None`. The function must accept 2 positional parameters: `status` (bool) indicating if the download was successful, and `result` (FileValidator object if successful, None if failed).
 - `block`: Whether to block until the download is complete. The default value is `True`.
 - `display`: Whether to display download progress and other optional messages. The default value is `True`.
-- `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
 
 - Supported Keyword Arguments:
     - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
@@ -410,7 +408,6 @@ The `Pypdl` class represents a file downloader that can download a file from a g
     callback = None,
     block = True,
     display = True,
-    clear_terminal = True
 )`: Starts the download process.
 
     ##### Parameters
@@ -443,7 +440,6 @@ The `Pypdl` class represents a file downloader that can download a file from a g
     - `callback`: A callback function to be called when the download is complete. The default value is `None`. The function must accept 2 positional parameters: `status` (bool) indicating if the download was successful, and `result` (FileValidator object if successful, None if failed).
     - `block`: Whether to block until the download is complete. The default value is `True`.
     - `display`: Whether to display download progress and other optional messages. The default value is `True`.
-    - `clear_terminal`: Whether to clear the terminal before displaying the download progress. The default value is `True`.
 
     - Supported Keyword Arguments:
         - `params`: Parameters to be sent in the query string of the new request. The default value is `None`.
@@ -477,44 +473,12 @@ The `Pypdl` class represents a file downloader that can download a file from a g
 
 ### Helper Classes
 
-#### `Basicdown()`
-
-The `Basicdown` class is the base downloader class that provides the basic structure for downloading files.
-
-##### Attributes
-
-- `curr`: The current size of the downloaded file in bytes.
-- `completed`: A flag that indicates if the download is complete.
-- `interrupt`: A flag that indicates if the download was interrupted.
-- `downloaded`: The total amount of data downloaded so far in bytes.
-
-##### Methods
-
-- `download(url, path, mode, session, **kwargs)`: Downloads data in chunks.
-
-#### `Singledown()`
-
-The `Singledown` class extends `Basicdown` and is responsible for downloading a whole file in a single segment.
-
-##### Methods
-
-- `worker(url, file_path, session, **kwargs)`: Downloads a whole file in a single segment.
-
-#### `Multidown()`
-
-The `Multidown` class extends `Basicdown` and is responsible for downloading a specific segment of a file.
-
-##### Methods
-
-- `worker(segment_table, id, session, **kwargs)`: Downloads a part of the file in multiple segments.
-
 #### `FileValidator()`
 
 The `FileValidator` class is used to validate the integrity of the downloaded file.
 
-##### Parameters
-
-- `path`: The path of the file to be validated.
+##### Attributes
+- `path`: The path of the file
 
 ##### Methods
 
@@ -526,12 +490,6 @@ The `FileValidator` class is used to validate the integrity of the downloaded fi
 
 The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object that shuts down the eventloop and executor when the result is retrieved.
 
-##### Parameters
-
-- `future`: The Future object to be wrapped.
-- `executor`: The executor to be shut down when the result is retrieved.
-- `loop`: The eventloop to be stopped when result is retrieved.
-
 ##### Methods
 
 - `result(timeout=None)`: Retrieves the result of the Future object and shuts down the executor. If the download was successful, it returns a `FileValidator` object; otherwise, it returns `None`.
@@ -539,11 +497,6 @@ The `AutoShutdownFuture` class is a wrapper for concurrent.futures.Future object
 #### `EFuture()`
 
 The `EFuture` class is a wrapper for a `concurrent.futures.Future` object that integrates with an event loop to handle asynchronous operations.
-
-##### Parameters
-
-- `future`: The `Future` object to be wrapped.
-- `loop`: The event loop that will be used to manage the `Future`.
 
 ##### Methods
 

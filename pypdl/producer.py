@@ -135,22 +135,22 @@ class Producer:
         if file_size := int(header.get("content-length", 0)):
             self._logger.debug("File size acquired from header")
 
-        if range_header:
-            start, end = get_range(range_header, file_size)
+        if multisegment and range_header:
+            size = get_range(range_header, file_size)
         else:
-            start = 0
-            end = file_size - 1
+            size = Size(0, file_size - 1)
 
-        size = Size(start, end)
         etag = header.get("etag", "")
         if etag != "":
             self._logger.debug("ETag acquired from header")
             etag = etag.strip('"')
 
-        if size.value < 1 or not header.get("accept-ranges"):
+        if size.value == 0 or not header.get("accept-ranges"):
             self._logger.debug("Single segment mode, accept-ranges or size not found")
-            kwargs["headers"] = user_headers
             multisegment = False
+
+        if not multisegment:
+            kwargs["headers"] = user_headers
 
         return url, file_path, multisegment, etag, size, kwargs
 

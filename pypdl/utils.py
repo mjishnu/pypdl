@@ -497,7 +497,7 @@ def default_logger(name: str) -> logging.Logger:
     handler = logging.FileHandler("pypdl.log", mode="a", delay=True)
     handler.setFormatter(
         logging.Formatter(
-            "(%(name)s)  %(asctime)s - %(levelname)s: %(message)s",
+            "%(asctime)s - %(levelname)s: %(message)s",
             datefmt="%d-%m-%y %H:%M:%S",
         )
     )

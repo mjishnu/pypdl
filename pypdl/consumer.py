@@ -3,7 +3,7 @@ from threading import Lock
 
 from aiofiles import os
 
-from .downloader import Multidown, Singledown
+from .downloader import SegmentDownloader, SingleSegmentDownloader
 from .utils import (
     FileValidator,
     auto_cancel_gather,
@@ -120,7 +120,7 @@ class Consumer:
         speed_limit = speed_limit / segments
         self._logger.debug("Multi-Segment download started %s", self._id)
         for segment in range(segments):
-            md = Multidown(self._session, speed_limit)
+            md = SegmentDownloader(self._session, speed_limit)
             self._workers.append(md)
             tasks.add(asyncio.create_task(md.worker(segment_table, segment, **kwargs)))
 
@@ -132,7 +132,7 @@ class Consumer:
 
     async def _single_segment(self, url, file_path, speed_limit, **kwargs):
         self._logger.debug("Single-Segment download started %s", self._id)
-        sd = Singledown(self._session, speed_limit)
+        sd = SingleSegmentDownloader(self._session, speed_limit)
         self._workers.append(sd)
         await sd.worker(url, file_path, **kwargs)
         self._logger.debug("Downloaded single segment %s", self._id)

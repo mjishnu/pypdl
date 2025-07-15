@@ -12,7 +12,7 @@ class BaseDownloader:
 
     def __init__(self, session: ClientSession, speed_limit: float) -> None:
         self.session = session
-        self.speed_limit = max(0, speed_limit * MEGABYTE)
+        self.speed_limit = speed_limit * MEGABYTE
         self.curr = 0
 
     async def download(self, url: str, path: str, mode: str, **kwargs) -> None:

@@ -10,7 +10,7 @@ with open("pypdl/__init__.py", "r") as f:
 setup(
     name="pypdl",
     version=VERSION,
-    author="mjishnu",
+    author="Jishnu M",
     author_email="<mjishnu@proton.me>",
     description=DESCRIPTION,
     long_description_content_type="text/markdown",

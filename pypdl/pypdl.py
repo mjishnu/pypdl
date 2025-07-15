@@ -34,15 +34,15 @@ class Pypdl:
         self._failed = []
 
         self.size = None
-        self.current_size = None
+        self.current_size = 0
         self.remaining_size = None
-        self.progress = None
-        self.speed = None
-        self.time_spent = None
+        self.progress = 0
+        self.speed = 0
+        self.time_spent = 0
         self.eta = None
         self.total_task = None
-        self.completed_task = None
-        self.task_progress = None
+        self.completed_task = 0
+        self.task_progress = 0
         self.completed = False
 
     @property
@@ -257,15 +257,15 @@ class Pypdl:
         self._producer = None
 
         self.size = None
-        self.current_size = None
+        self.current_size = 0
         self.remaining_size = None
-        self.progress = None
-        self.speed = None
-        self.time_spent = None
+        self.progress = 0
+        self.speed = 0
+        self.time_spent = 0
         self.eta = None
         self.total_task = None
-        self.completed_task = None
-        self.task_progress = None
+        self.completed_task = 0
+        self.task_progress = 0
         self.completed = False
         self._success.clear()
         self._failed.clear()
@@ -310,7 +310,7 @@ class Pypdl:
             else:
                 self.eta = -1
 
-        if self.completed_task is self.total_task:
+        if self.completed_task == self.total_task:
             future = asyncio.run_coroutine_threadsafe(
                 self._completed(), self._loop.get()
             )

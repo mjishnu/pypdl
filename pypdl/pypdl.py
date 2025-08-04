@@ -325,23 +325,28 @@ class Pypdl:
 
     def _display(self):
         utils.cursor_up()
-        whitespace = " "
+
         if self.size:
-            progress_bar = f"[{'█' * self.progress}{'·' * (100 - self.progress)}] {self.progress}% \n"
-
+            progress_bar = utils.make_progress_bar(self.progress)
+            info_parts = []
             if self.total_task > 1:
-                info1 = f"Total Downloads: {self.completed_task}/{self.total_task}, "
-            else:
-                info1 = ""
-
-            info2 = f"Size: {utils.to_mb(self.size):.2f} MB, Speed: {self.speed:.2f} MB/s, ETA: {utils.seconds_to_hms(self.eta)}"
-            print(progress_bar + info1 + info2 + whitespace * 35)
+                info_parts.append(
+                    f"Total Downloads: {self.completed_task}/{self.total_task}"
+                )
+            info_parts.extend(
+                [
+                    f"Size: {utils.to_mb(self.size):.2f} MB",
+                    f"Speed: {self.speed:.2f} MB/s",
+                    f"ETA: {utils.seconds_to_hms(self.eta)}",
+                ]
+            )
+            info_line = ", ".join(info_parts)
+            print(f"{progress_bar}\n{utils.pad_line(info_line)}")
         else:
             if self.total_task > 1:
-                download_stats = f"[{'█' * self.task_progress}{'·' * (100 - self.task_progress)}] {self.task_progress}% \n"
+                progress_bar = utils.make_progress_bar(self.task_progress)
             else:
-                download_stats = f"Downloading... {whitespace * 95}\n"
+                progress_bar = utils.pad_line("Downloading...")
 
-            info = f"Total Downloads: {self.completed_task}/{self.total_task}, Downloaded Size: {utils.to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s"
-
-            print(download_stats + info + whitespace * 35)
+            info_line = f"Total Downloads: {self.completed_task}/{self.total_task}, Downloaded Size: {utils.to_mb(self.current_size):.2f} MB, Speed: {self.speed:.2f} MB/s"
+            print(f"{progress_bar}\n{utils.pad_line(info_line)}")

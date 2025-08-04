@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import shutil
 import sys
 import time
 from concurrent.futures import CancelledError, Executor, Future, ThreadPoolExecutor
@@ -311,6 +312,18 @@ def seconds_to_hms(sec: float) -> str:
 def cursor_up() -> None:
     sys.stdout.write("\x1b[1A" * 2)  # Move cursor up two lines
     sys.stdout.flush()
+
+
+def make_progress_bar(percentage):
+    terminal_width = shutil.get_terminal_size().columns
+    bar_width = max(10, min(100, terminal_width - 7))
+    filled = int((percentage / 100) * bar_width)
+    return f"[{'█' * filled}{'·' * (bar_width - filled)}] {percentage}%"
+
+
+def pad_line(text):
+    terminal_width = shutil.get_terminal_size().columns
+    return text + " " * max(0, terminal_width - len(text))
 
 
 def check_main_thread_exception(e: Exception) -> None:

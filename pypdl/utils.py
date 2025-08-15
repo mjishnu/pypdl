@@ -302,23 +302,9 @@ def to_mb(size_in_bytes: int) -> float:
     return max(0, size_in_bytes) / MEGABYTE
 
 
-def seconds_to_hms(sec: float) -> str:
-    if sec == -1:
-        return "99:59:59"
-    time_struct = time.gmtime(sec)
-    return time.strftime("%H:%M:%S", time_struct)
-
-
 def cursor_up() -> None:
     sys.stdout.write("\x1b[1A" * 2)  # Move cursor up two lines
     sys.stdout.flush()
-
-
-def make_progress_bar(percentage):
-    terminal_width = shutil.get_terminal_size().columns
-    bar_width = max(10, min(100, terminal_width - 7))
-    filled = int((percentage / 100) * bar_width)
-    return f"[{'█' * filled}{'·' * (bar_width - filled)}] {percentage}%"
 
 
 def pad_line(text):
@@ -329,6 +315,32 @@ def pad_line(text):
 def check_main_thread_exception(e: Exception) -> None:
     if str(e) == "cannot schedule new futures after shutdown":
         raise MainThreadException from e
+
+
+def seconds_to_hms(sec: float) -> str:
+    if sec == -1:
+        return "99:59:59"
+    time_struct = time.gmtime(sec)
+    return time.strftime("%H:%M:%S", time_struct)
+
+
+def make_progress_bar(percentage) -> str:
+    terminal_width = shutil.get_terminal_size().columns
+    bar_width = max(10, min(100, terminal_width - 7))
+    filled = int((percentage / 100) * bar_width)
+    return f"[{'█' * filled}{'·' * (bar_width - filled)}] {percentage}%"
+
+
+async def extract_metadata(url, session, method, **kwargs) -> dict:
+    async with getattr(session, method)(url, **kwargs) as resp:
+        h = {k.lower(): v.strip('"') for k, v in resp.headers.items()}
+        return {
+            "accept-ranges": h.get("accept-ranges", "").lower() == "bytes",
+            "content-length": h.get("content-length", ""),
+            "content-range": h.get("content-range", ""),
+            "etag": h.get("etag", ""),
+            "content-disposition": h.get("content-disposition", ""),
+        }
 
 
 async def get_url(url: Union[str, Callable]) -> str:
@@ -362,7 +374,7 @@ async def auto_cancel_gather(*args, **kwargs) -> List:
 async def get_filepath(url: str, headers: Dict[str, str], file_path: str) -> str:
     # Try to get filename from Content-Disposition header
     filename = None
-    content_disposition = headers.get("Content-Disposition", "")
+    content_disposition = headers.get("content-disposition", "")
 
     # Check for filename* parameter (RFC 6266)
     if "filename*=" in content_disposition:

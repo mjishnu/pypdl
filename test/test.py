@@ -179,7 +179,7 @@ class TestPypdl(unittest.TestCase):
         self.assertTrue(os.path.exists(log_file))
         with open(log_file, "r") as f:
             log_content = f.read()
-        header_pattern = re.compile("Header acquired from HEAD request")
+        header_pattern = re.compile("Fetching headers with HEAD to get metadata")
         self.assertTrue(
             header_pattern.search(log_content),
             "Unable to acquire header from HEAD request",
@@ -196,7 +196,9 @@ class TestPypdl(unittest.TestCase):
 
         with open(log_file, "r") as f:
             log_content = f.read()
-        header_pattern = re.compile("Header acquired from GET request")
+        header_pattern = re.compile(
+            "Fetching headers with GET to fill missing metadata"
+        )
         self.assertTrue(
             header_pattern.search(log_content),
             "Unable to acquire header from GET request",

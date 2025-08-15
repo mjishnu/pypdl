@@ -8,6 +8,7 @@ from .utils import (
     get_range,
     get_url,
     run_callback,
+    extract_metadata,
 )
 
 
@@ -130,22 +131,30 @@ class Producer:
                     del _user_headers[key]
             kwargs["headers"] = _user_headers
 
-        header = await self._fetch_header(url, **kwargs)
-        file_path = await get_filepath(url, header, file_path)
-        if file_size := int(header.get("content-length", 0)):
-            self._logger.debug("File size acquired from header")
+        metadata = await self._fetch_metadata(url, **kwargs)
+        file_path = await get_filepath(url, metadata, file_path)
+
+        file_size = None
+        if metadata.get("content-range"):
+            try:
+                file_size = int(metadata["content-range"].split("/")[-1])
+            except ValueError:
+                file_size = None
+
+        if file_size is None:
+            file_size = int(metadata.get("content-length", 0))
+        self._logger.debug("file size: %s", file_size)
 
         if multisegment and range_header:
             size = get_range(range_header, file_size)
         else:
             size = Size(0, file_size - 1)
 
-        etag = header.get("etag", "")
+        etag = metadata.get("etag", "")
         if etag != "":
             self._logger.debug("ETag acquired from header")
-            etag = etag.strip('"')
 
-        if size.value == 0 or not header.get("accept-ranges"):
+        if size.value == 0 or not metadata.get("accept-ranges"):
             self._logger.debug("Single segment mode, accept-ranges or size not found")
             multisegment = False
 
@@ -154,16 +163,20 @@ class Producer:
 
         return url, file_path, multisegment, etag, size, kwargs
 
-    async def _fetch_header(self, url, **kwargs):
-        try:
-            async with self._session.head(url, **kwargs) as response:
-                if response.status < 400:
-                    self._logger.debug("Header acquired from HEAD request")
-                    return response.headers
-        except Exception:
-            pass
+    async def _fetch_metadata(self, url, **kwargs):
+        self._logger.debug("Fetching headers with HEAD to get metadata")
+        kwargs["raise_for_status"] = False
+        metadata = await extract_metadata(url, self._session, "head", **kwargs)
 
-        async with self._session.get(url, **kwargs) as response:
-            if response.status < 400:
-                self._logger.debug("Header acquired from GET request")
-                return response.headers
+        if not (
+            metadata["accept-ranges"]
+            and metadata["etag"]
+            and metadata["content-disposition"]
+            and (metadata["content-length"] or metadata["content-range"])
+        ):
+            self._logger.debug("Fetching headers with GET to fill missing metadata")
+            kwargs.setdefault("headers", {}).update({"Range": "bytes=0-0"})
+            kwargs["raise_for_status"] = True
+            metadata.update(await extract_metadata(url, self._session, "get", **kwargs))
+
+        return metadata

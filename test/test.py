@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -10,18 +11,31 @@ import unittest
 import warnings
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from server import LocalServer
 from pypdl import Pypdl
 
 
 class TestPypdl(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = LocalServer()
+        cls.server.start()
+        cls.url_tiny = f"{cls.server.base_url}/file_tiny"
+        cls.url_small = f"{cls.server.base_url}/file_small"
+        cls.url_large = f"{cls.server.base_url}/file_large"
+        cls.url_nohead = f"{cls.server.base_url}/nohead_small"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.stop()
+
     def __init__(self, *args, **kwargs):
         super(TestPypdl, self).__init__(*args, **kwargs)
         self.temp_dir = os.path.join(tempfile.gettempdir(), "pypdl_test")
-        self.download_file_1MB = "https://7-zip.org/a/7z2409-src.tar.xz"
-        self.no_head_support_url = "https://ash-speed.hetzner.com/100MB.bin"
-
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
         os.mkdir(self.temp_dir)
@@ -43,7 +57,7 @@ class TestPypdl(unittest.TestCase):
 
     def test_single_segment_download(self):
         dl = Pypdl()
-        url = self.download_file_1MB
+        url = self.url_small
         file_path = os.path.join(self.temp_dir)
         result = dl.start(url, file_path, display=False, multisegment=False)
         success = len(result)
@@ -51,7 +65,7 @@ class TestPypdl(unittest.TestCase):
 
     def test_multi_segment_download(self):
         dl = Pypdl()
-        url = self.download_file_1MB
+        url = self.url_small
         file_path = os.path.join(self.temp_dir, "test.dat")
         future = dl.start(url, file_path, display=False, block=False, speed_limit=0.5)
         time.sleep(2)
@@ -64,19 +78,19 @@ class TestPypdl(unittest.TestCase):
         filepath = [os.path.join(self.temp_dir, f"file{i}.dat") for i in range(4)]
         tasks = [
             {
-                "url": self.download_file_1MB,
+                "url": self.url_small,
                 "file_path": filepath[0],
             },
             {
-                "url": self.download_file_1MB,
+                "url": self.url_small,
                 "file_path": filepath[1],
             },
             {
-                "url": self.download_file_1MB,
+                "url": self.url_small,
                 "file_path": filepath[2],
             },
             {
-                "url": self.download_file_1MB,
+                "url": self.url_small,
                 "file_path": filepath[3],
             },
         ]
@@ -87,7 +101,7 @@ class TestPypdl(unittest.TestCase):
     def test_allow_reuse(self):
         result = []
         dl = Pypdl(allow_reuse=True)
-        url = self.download_file_1MB
+        url = self.url_small
         filepath = [os.path.join(self.temp_dir, f"file{i}.dat") for i in range(2)]
 
         res1 = dl.start(url, filepath[0], display=False)
@@ -99,22 +113,33 @@ class TestPypdl(unittest.TestCase):
         self._assert_download(2, success, filepath)
 
     def test_speed_limit(self):
-        dl = Pypdl()
-        url = self.download_file_1MB  # file is 1.44MB, accurate time is 14s
-        file_path = os.path.join(self.temp_dir, "test_1.dat")
-        dl.start(url, file_path, display=False, speed_limit=0.1)
-        self.assertTrue(10 <= int(dl.time_spent) <= 30, f"took: {dl.time_spent}s")
+        cases = [
+            (self.url_tiny, 262144, 0.5, 0, 3),  # ~256KB @ 0.5MB/s ~0.5s
+            (self.url_small, 1572864, 0.2, 5, 20),  # ~1.5MB @ 0.2MB/s ~7.5s
+        ]
+        for url, size, limit, tmin, tmax in cases:
+            dl = Pypdl()
+            file_path = os.path.join(
+                self.temp_dir, f"speed_{os.path.basename(url)}.dat"
+            )
+            dl.start(url, file_path, display=False, speed_limit=limit)
+            self.assertTrue(os.path.exists(file_path))
+            self.assertEqual(os.path.getsize(file_path), size)
+            self.assertTrue(
+                tmin <= dl.time_spent <= tmax,
+                f"{url} took {dl.time_spent:.2f}s; expected [{tmin}, {tmax}]s",
+            )
 
     def test_unblocked_download(self):
         dl = Pypdl(max_concurrent=2)
         filepath = [os.path.join(self.temp_dir, f"file{i}.dat") for i in range(2)]
         tasks = [
             {
-                "url": self.download_file_1MB,
+                "url": self.url_small,
                 "file_path": filepath[0],
             },
             {
-                "url": self.download_file_1MB,
+                "url": self.url_small,
                 "file_path": filepath[1],
             },
         ]
@@ -126,7 +151,7 @@ class TestPypdl(unittest.TestCase):
 
     def test_stop_restart_with_segements(self):
         dl = Pypdl(max_concurrent=2)
-        url = self.download_file_1MB
+        url = self.url_small
         file_path = os.path.join(self.temp_dir, "test.dat")
         dl.start(
             url, file_path, block=False, display=False, speed_limit=0.15, segments=3
@@ -154,7 +179,7 @@ class TestPypdl(unittest.TestCase):
         logger.addHandler(handler)
 
         dl = Pypdl(logger=logger)
-        url = self.download_file_1MB
+        url = self.url_small
         file_path = os.path.join(self.temp_dir, "test.dat")
         dl.start(url, file_path, display=False, block=False)
         time.sleep(3)
@@ -171,7 +196,7 @@ class TestPypdl(unittest.TestCase):
         logger.addHandler(handler)
 
         dl = Pypdl(allow_reuse=True, logger=logger)
-        url = self.download_file_1MB
+        url = self.url_small
         file_path = os.path.join(self.temp_dir, "test.dat")
         dl.start(url, file_path, display=False, block=False, speed_limit=0.1)
         time.sleep(3)
@@ -185,10 +210,10 @@ class TestPypdl(unittest.TestCase):
             "Unable to acquire header from HEAD request",
         )
 
-        url = self.no_head_support_url
+        url = self.url_nohead
         file_path = os.path.join(self.temp_dir, "temp.csv")
         dl.start(url, file_path, display=False, block=False, speed_limit=0.1)
-        time.sleep(10)
+        time.sleep(2)
 
         dl.shutdown()
         logger.removeHandler(handler)
@@ -205,7 +230,7 @@ class TestPypdl(unittest.TestCase):
         )
 
     def test_retries(self):
-        mirrors = [self.download_file_1MB, "http://fake_website/file2"]
+        mirrors = [self.url_small, "http://fake_website/file2"]
         file_path = os.path.join(self.temp_dir, "test.dat")
         dl = Pypdl()
         res = dl.start(
@@ -226,7 +251,7 @@ class TestPypdl(unittest.TestCase):
         logger.addHandler(handler)
 
         dl = Pypdl(logger=logger, allow_reuse=True)
-        url = self.download_file_1MB
+        url = self.url_small
         file_path = os.path.join(self.temp_dir, "test.dat")
         res = dl.start(url, file_path, display=False)
         success = len(res)
@@ -245,10 +270,12 @@ class TestPypdl(unittest.TestCase):
 
     def test_etag_validation(self):
         dl = Pypdl()
-        url = self.download_file_1MB
+        url = self.url_large
         file_path = os.path.join(self.temp_dir, "test.dat")
-        dl.start(url, file_path, display=False, block=False, speed_limit=0.1)
-        time.sleep(5)
+        dl.start(
+            url, file_path, display=False, block=False, speed_limit=0.1, segments=4
+        )
+        time.sleep(3)
         progress = dl.progress
         dl.stop()
 
@@ -278,6 +305,45 @@ class TestPypdl(unittest.TestCase):
         file_path = os.path.join(self.temp_dir, "test.dat")
         dl.start(url, file_path, display=False)
         self.assertEqual(len(dl.failed), 1, "Failed downloads not found")
+
+    def test_range_header(self):
+        dl = Pypdl()
+        url = self.url_small
+        file_path = os.path.join(self.temp_dir, "range_test.dat")
+        headers = {"Range": "bytes=0-99999"}  # 100,000 bytes
+        res = dl.start(url, file_path, display=False, segments=4, headers=headers)
+        self.assertEqual(len(res), 1)
+        self.assertTrue(os.path.exists(file_path))
+        self.assertEqual(os.path.getsize(file_path), 100000)
+
+    def test_callback_and_hash(self):
+        dl = Pypdl()
+        url = self.url_small
+        file_path = os.path.join(self.temp_dir, "hash_test.dat")
+        results = []
+
+        def cb(status, fv):
+            try:
+                md5 = fv.get_hash("md5") if fv else None
+            except Exception:
+                md5 = None
+            results.append((status, md5))
+
+        res = dl.start(
+            url,
+            file_path,
+            display=False,
+            hash_algorithms=["md5"],
+            callback=cb,
+        )
+        self.assertEqual(len(res), 1)
+        timeout = time.time() + 5
+        while not results and time.time() < timeout:
+            time.sleep(0.05)
+        self.assertTrue(results and results[0][0] is True)
+        with open(file_path, "rb") as f:
+            expected_md5 = hashlib.md5(f.read()).hexdigest()
+        self.assertEqual(results[0][1], expected_md5)
 
 
 if __name__ == "__main__":

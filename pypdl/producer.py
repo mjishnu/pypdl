@@ -9,6 +9,7 @@ from .utils import (
     get_url,
     run_callback,
     extract_metadata,
+    get_file_size,
 )
 
 
@@ -133,16 +134,7 @@ class Producer:
 
         metadata = await self._fetch_metadata(url, **kwargs)
         file_path = await get_filepath(url, metadata, file_path)
-
-        file_size = None
-        if metadata.get("content-range"):
-            try:
-                file_size = int(metadata["content-range"].split("/")[-1])
-            except ValueError:
-                file_size = None
-
-        if file_size is None:
-            file_size = int(metadata.get("content-length", 0))
+        file_size = get_file_size(metadata)
         self._logger.debug("file size: %s", file_size)
 
         if multisegment and range_header:

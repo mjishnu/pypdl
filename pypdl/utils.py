@@ -11,6 +11,7 @@ from threading import Event, Thread
 from typing import Callable, Dict, List, Optional, Union
 from urllib.parse import unquote, urlparse
 
+from aiohttp import ClientSession as Session
 from aiofiles import open as fopen
 from aiofiles import os as aio_os
 
@@ -307,7 +308,7 @@ def cursor_up() -> None:
     sys.stdout.flush()
 
 
-def pad_line(text):
+def pad_line(text: str) -> str:
     terminal_width = shutil.get_terminal_size().columns
     return text + " " * max(0, terminal_width - len(text))
 
@@ -324,14 +325,27 @@ def seconds_to_hms(sec: float) -> str:
     return time.strftime("%H:%M:%S", time_struct)
 
 
-def make_progress_bar(percentage) -> str:
+def make_progress_bar(percentage: int) -> str:
     terminal_width = shutil.get_terminal_size().columns
     bar_width = max(10, min(100, terminal_width - 7))
     filled = int((percentage / 100) * bar_width)
     return f"[{'█' * filled}{'·' * (bar_width - filled)}] {percentage}%"
 
 
-async def extract_metadata(url, session, method, **kwargs) -> dict:
+def get_file_size(metadata: dict) -> int:
+    status = metadata.get("status")
+    if status == 200:
+        return int(metadata.get("content-length", 0))
+    elif status == 206:
+        try:
+            return int(metadata["content-range"].split("/")[-1])
+        except ValueError:
+            return 0
+    else:
+        return 0
+
+
+async def extract_metadata(url: str, session: Session, method: str, **kwargs) -> dict:
     async with getattr(session, method)(url, **kwargs) as resp:
         h = {k.lower(): v.strip('"') for k, v in resp.headers.items()}
         return {
@@ -340,6 +354,7 @@ async def extract_metadata(url, session, method, **kwargs) -> dict:
             "content-range": h.get("content-range", ""),
             "etag": h.get("etag", ""),
             "content-disposition": h.get("content-disposition", ""),
+            "status": resp.status,
         }
 
 

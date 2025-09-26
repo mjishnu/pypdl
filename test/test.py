@@ -28,6 +28,7 @@ class TestPypdl(unittest.TestCase):
         cls.url_small = f"{cls.server.base_url}/file_small"
         cls.url_large = f"{cls.server.base_url}/file_large"
         cls.url_nohead = f"{cls.server.base_url}/nohead_small"
+        cls.url_stream = f"{cls.server.base_url}/stream_chunked"
 
     @classmethod
     def tearDownClass(cls):
@@ -344,6 +345,21 @@ class TestPypdl(unittest.TestCase):
         with open(file_path, "rb") as f:
             expected_md5 = hashlib.md5(f.read()).hexdigest()
         self.assertEqual(results[0][1], expected_md5)
+
+    def test_streaming_without_content_length(self):
+        # This simulates a server that streams data (chunked) without Content-Length.
+        # We expect pypdl to download in single-segment mode and not raise ValueError.
+        dl = Pypdl()
+        url = self.url_stream
+        file_path = os.path.join(self.temp_dir, "stream_chunked.dat")
+
+        # Run download; should not raise exceptions like ValueError due to size handling
+        res = dl.start(url, file_path, display=False)
+        self.assertEqual(len(res), 1)
+        self.assertTrue(os.path.exists(file_path))
+        # Size should be the streamed size from server
+        expected_size = len(self.server.data_stream)
+        self.assertEqual(os.path.getsize(file_path), expected_size)
 
 
 if __name__ == "__main__":

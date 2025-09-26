@@ -1,7 +1,8 @@
 import asyncio
 import socket
 import threading
-from aiohttp import web
+import contextlib
+from aiohttp import web, client_exceptions
 
 
 class LocalServer:
@@ -19,6 +20,8 @@ class LocalServer:
         self.data_small = b"0123456789ABCDEF" * 1024 * 96  # ~1.5 MB
         self.data_large = b"abcdefghijklmnopqrstuvwxyz" * 1024 * 400  # ~10 MB
         self.data_nohead = b"N" * (1024 * 1024)  # 1 MB
+        # Streamed data for chunked transfer without Content-Length (~512 KB)
+        self.data_stream = b"STREAM" * (1024 * 85 + 4)  # ~522,248 bytes
 
         self._loop = None
         self._thread = None
@@ -100,6 +103,49 @@ class LocalServer:
     async def get_nohead_small(self, request: web.Request):
         return await self._get_with_range(request, self.data_nohead, "nohead_small.bin")
 
+    async def head_stream_chunked(self, request: web.Request):
+        # Simulate a server that does not provide Content-Length
+        # and may not advertise Accept-Ranges
+        headers = {
+            # Intentionally omit Content-Length and Accept-Ranges
+            "ETag": "test-stream-etag",
+            "Content-Disposition": 'attachment; filename="stream_chunked.bin"',
+        }
+        return web.Response(status=200, headers=headers)
+
+    async def get_stream_chunked(self, request: web.Request):
+        # Stream response with chunked transfer (no Content-Length)
+        resp = web.StreamResponse(
+            status=200,
+            headers={
+                "ETag": "test-stream-etag",
+                "Content-Disposition": 'attachment; filename="stream_chunked.bin"',
+            },
+        )
+        await resp.prepare(request)
+
+        chunk_size = 8192
+        data = self.data_stream
+        tr = request.transport
+        try:
+            for i in range(0, len(data), chunk_size):
+                if tr is None or tr.is_closing():
+                    break
+                await resp.write(data[i : i + chunk_size])
+                await asyncio.sleep(0)
+        except (
+            asyncio.CancelledError,
+            ConnectionResetError,
+            client_exceptions.ClientConnectionError,
+        ):
+            # Client disconnected mid-stream; quietly ignore
+            pass
+        finally:
+            if tr is not None and not tr.is_closing():
+                with contextlib.suppress(Exception):
+                    await resp.write_eof()
+        return resp
+
     # --------------------------- Server Lifecycle --------------------------
     def _pick_free_port(self) -> int:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -116,6 +162,8 @@ class LocalServer:
         self._app.router.add_route("GET", "/file_large", self.get_file_large)
         self._app.router.add_route("HEAD", "/nohead_small", self.head_nohead_small)
         self._app.router.add_route("GET", "/nohead_small", self.get_nohead_small)
+        self._app.router.add_route("HEAD", "/stream_chunked", self.head_stream_chunked)
+        self._app.router.add_route("GET", "/stream_chunked", self.get_stream_chunked)
 
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()

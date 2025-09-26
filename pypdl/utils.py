@@ -318,6 +318,13 @@ def check_main_thread_exception(e: Exception) -> None:
         raise MainThreadException from e
 
 
+def get_int(value: str) -> int:
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
+
+
 def seconds_to_hms(sec: float) -> str:
     if sec == -1:
         return "99:59:59"
@@ -335,12 +342,9 @@ def make_progress_bar(percentage: int) -> str:
 def get_file_size(metadata: dict) -> int:
     status = metadata.get("status")
     if status == 200:
-        return int(metadata.get("content-length", 0))
+        return get_int(metadata.get("content-length"))
     elif status == 206:
-        try:
-            return int(metadata["content-range"].split("/")[-1])
-        except ValueError:
-            return 0
+        return get_int(metadata["content-range"].split("/")[-1])
     else:
         return 0
 
